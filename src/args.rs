@@ -1,4 +1,4 @@
-use crate::cli::LdkUserInfo;
+use crate::cli::{CardanoRelayConfig, LdkUserInfo};
 use bitcoin::network::Network;
 use lightning::ln::msgs::SocketAddress;
 use std::collections::HashMap;
@@ -96,6 +96,46 @@ pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 		}
 	}
 
+	// Parse optional Cardano configuration from environment variables.
+	let cardano = if env::var("CARDANO_ENABLED").map(|v| v == "1" || v == "true").unwrap_or(false) {
+		let skey_path = env::var("CARDANO_SKEY_PATH").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_SKEY_PATH not set");
+		});
+		let script_address = env::var("CARDANO_SCRIPT_ADDRESS").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_SCRIPT_ADDRESS not set");
+		});
+		let script_cbor_path = env::var("CARDANO_SCRIPT_CBOR_PATH").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_SCRIPT_CBOR_PATH not set");
+		});
+		let cbtc_policy_id = env::var("CARDANO_CBTC_POLICY_ID").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_CBTC_POLICY_ID not set");
+		});
+		let cbtc_asset_name = env::var("CARDANO_CBTC_ASSET_NAME").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_CBTC_ASSET_NAME not set");
+		});
+		let operator_address = env::var("CARDANO_OPERATOR_ADDRESS").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_OPERATOR_ADDRESS not set");
+		});
+		let operator_pkh = env::var("CARDANO_OPERATOR_PKH").unwrap_or_else(|_| {
+			panic!("CARDANO_ENABLED=true but CARDANO_OPERATOR_PKH not set");
+		});
+		Some(CardanoRelayConfig {
+			blockfrost_url: env::var("CARDANO_BLOCKFROST_URL")
+				.unwrap_or_else(|_| "http://localhost:8080/api/v1/".into()),
+			blockfrost_key: env::var("CARDANO_BLOCKFROST_KEY")
+				.unwrap_or_else(|_| "local".into()),
+			skey_path,
+			script_address,
+			script_cbor_path,
+			cbtc_policy_id,
+			cbtc_asset_name,
+			operator_address,
+			operator_pkh,
+		})
+	} else {
+		None
+	};
+
 	Ok(LdkUserInfo {
 		bitcoind_rpc_username,
 		bitcoind_rpc_password,
@@ -106,6 +146,7 @@ pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 		ldk_announced_listen_addr,
 		ldk_announced_node_name,
 		network,
+		cardano,
 	})
 }
 
@@ -355,8 +396,11 @@ mod rpc_auth_tests {
 
 	#[test]
 	fn test_get_rpc_auth_from_env_vars_success() {
-		env::set_var(BITCOIND_RPC_USER_KEY, EXPECTED_USER);
-		env::set_var(BITCOIND_RPC_PASSWORD_KEY, EXPECTED_PASSWORD);
+		// SAFETY: This test runs single-threaded and only modifies test-specific env vars.
+		unsafe {
+			env::set_var(BITCOIND_RPC_USER_KEY, EXPECTED_USER);
+			env::set_var(BITCOIND_RPC_PASSWORD_KEY, EXPECTED_PASSWORD);
+		}
 		let (username, password) = get_rpc_auth_from_env_vars().unwrap();
 		assert_eq!(username, EXPECTED_USER);
 		assert_eq!(password, EXPECTED_PASSWORD);
