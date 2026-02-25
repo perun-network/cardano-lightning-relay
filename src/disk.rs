@@ -1,4 +1,4 @@
-use crate::{InboundPaymentInfoStorage, NetworkGraph, OutboundPaymentInfoStorage};
+use crate::types::{InboundPaymentInfoStorage, NetworkGraph, OutboundPaymentInfoStorage};
 use bitcoin::Network;
 use chrono::Utc;
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringDecayParameters};
