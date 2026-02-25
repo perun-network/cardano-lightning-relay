@@ -313,3 +313,231 @@ fn row_to_offramp(row: &rusqlite::Row) -> OfframpMapping {
 		expires_at: row.get(12).unwrap_or(0),
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	// ─── Status enum round-trips ────────────────────────────────────────────
+
+	#[test]
+	fn swap_status_roundtrip() {
+		let variants = [
+			SwapStatus::Pending,
+			SwapStatus::Fulfilling,
+			SwapStatus::Completed,
+			SwapStatus::Failed,
+			SwapStatus::Expired,
+		];
+		for v in &variants {
+			assert_eq!(SwapStatus::from_str(v.as_str()), *v);
+		}
+	}
+
+	#[test]
+	fn swap_status_unknown_falls_back_to_failed() {
+		assert_eq!(SwapStatus::from_str("garbage"), SwapStatus::Failed);
+		assert_eq!(SwapStatus::from_str(""), SwapStatus::Failed);
+	}
+
+	#[test]
+	fn offramp_status_roundtrip() {
+		let variants = [
+			OfframpStatus::AwaitingDeposit,
+			OfframpStatus::PendingVerification,
+			OfframpStatus::PayingLightning,
+			OfframpStatus::DepositingToPool,
+			OfframpStatus::Completed,
+			OfframpStatus::Failed,
+		];
+		for v in &variants {
+			assert_eq!(OfframpStatus::from_str(v.as_str()), *v);
+		}
+	}
+
+	#[test]
+	fn offramp_status_unknown_falls_back_to_failed() {
+		assert_eq!(OfframpStatus::from_str("xyz"), OfframpStatus::Failed);
+		assert_eq!(OfframpStatus::from_str(""), OfframpStatus::Failed);
+	}
+
+	// ─── SwapDb helpers ─────────────────────────────────────────────────────
+
+	fn test_db() -> SwapDb {
+		SwapDb::open(":memory:")
+	}
+
+	fn make_swap(hash: &str, expires_at: i64) -> SwapMapping {
+		SwapMapping {
+			payment_hash: hash.to_string(),
+			invoice_id: 1,
+			amount_cbtc: 100_000,
+			cardano_address: "addr_test1qz...".to_string(),
+			status: SwapStatus::Pending,
+			created_at: 1_000_000,
+			expires_at,
+			cardano_tx_hash: None,
+		}
+	}
+
+	fn make_offramp(id: i64, hash: &str) -> OfframpMapping {
+		OfframpMapping {
+			offramp_id: id,
+			bolt11: "lnbc1...".to_string(),
+			payment_hash: hash.to_string(),
+			amount_cbtc: 50_000,
+			cbtc_tx_hash: String::new(),
+			status: OfframpStatus::AwaitingDeposit,
+			created_at: 1_000_000,
+			lightning_preimage: None,
+			deposit_tx_hash: None,
+			error_message: None,
+			cardano_offramp_tx_hash: None,
+			refund_address: "addr_test1qz...".to_string(),
+			expires_at: 2_000_000,
+		}
+	}
+
+	// ─── Onramp CRUD ────────────────────────────────────────────────────────
+
+	#[test]
+	fn insert_and_get_by_payment_hash() {
+		let db = test_db();
+		let swap = make_swap("aabb01", 9_999_999);
+		db.insert(&swap);
+
+		let got = db.get_by_payment_hash("aabb01").unwrap();
+		assert_eq!(got.payment_hash, "aabb01");
+		assert_eq!(got.invoice_id, 1);
+		assert_eq!(got.amount_cbtc, 100_000);
+		assert_eq!(got.status, SwapStatus::Pending);
+		assert!(got.cardano_tx_hash.is_none());
+	}
+
+	#[test]
+	fn get_nonexistent_returns_none() {
+		let db = test_db();
+		assert!(db.get_by_payment_hash("does_not_exist").is_none());
+	}
+
+	#[test]
+	fn update_status_changes_status_and_tx_hash() {
+		let db = test_db();
+		db.insert(&make_swap("hash01", 9_999_999));
+
+		db.update_status("hash01", SwapStatus::Completed, Some("cardano_tx_abc"));
+		let got = db.get_by_payment_hash("hash01").unwrap();
+		assert_eq!(got.status, SwapStatus::Completed);
+		assert_eq!(got.cardano_tx_hash.as_deref(), Some("cardano_tx_abc"));
+	}
+
+	#[test]
+	fn get_expired_pending_filters_correctly() {
+		let db = test_db();
+		let now = 5_000_000;
+
+		// expired + pending → should be returned
+		db.insert(&make_swap("expired_pending", now - 1));
+		// not expired + pending → should NOT be returned
+		db.insert(&make_swap("future_pending", now + 1_000));
+		// expired + completed → should NOT be returned
+		let mut completed = make_swap("expired_completed", now - 1);
+		completed.payment_hash = "expired_completed".to_string();
+		db.insert(&completed);
+		db.update_status("expired_completed", SwapStatus::Completed, None);
+
+		let expired = db.get_expired_pending(now);
+		assert_eq!(expired.len(), 1);
+		assert_eq!(expired[0].payment_hash, "expired_pending");
+	}
+
+	#[test]
+	fn get_expired_pending_empty_when_none() {
+		let db = test_db();
+		// Insert a non-expired pending swap
+		db.insert(&make_swap("future", 99_999_999));
+		assert!(db.get_expired_pending(1_000_000).is_empty());
+	}
+
+	// ─── Offramp CRUD ───────────────────────────────────────────────────────
+
+	#[test]
+	fn insert_offramp_and_get_by_id() {
+		let db = test_db();
+		let m = make_offramp(1, "off_hash_01");
+		db.insert_offramp(&m);
+
+		let got = db.get_offramp_by_id(1).unwrap();
+		assert_eq!(got.offramp_id, 1);
+		assert_eq!(got.payment_hash, "off_hash_01");
+		assert_eq!(got.amount_cbtc, 50_000);
+		assert_eq!(got.status, OfframpStatus::AwaitingDeposit);
+		assert!(got.lightning_preimage.is_none());
+	}
+
+	#[test]
+	fn get_offramp_by_payment_hash() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "hash_lookup"));
+
+		let got = db.get_offramp_by_payment_hash("hash_lookup").unwrap();
+		assert_eq!(got.offramp_id, 1);
+	}
+
+	#[test]
+	fn get_offramp_nonexistent_returns_none() {
+		let db = test_db();
+		assert!(db.get_offramp_by_id(999).is_none());
+	}
+
+	#[test]
+	fn update_offramp_status_with_preimage() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off01"));
+
+		db.update_offramp_status(1, OfframpStatus::Completed, Some("preimage_hex"), None, None);
+		let got = db.get_offramp_by_id(1).unwrap();
+		assert_eq!(got.status, OfframpStatus::Completed);
+		assert_eq!(got.lightning_preimage.as_deref(), Some("preimage_hex"));
+	}
+
+	#[test]
+	fn update_offramp_status_coalesce_preserves_existing() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off02"));
+
+		// First update sets preimage
+		db.update_offramp_status(1, OfframpStatus::PayingLightning, Some("pre_img"), None, None);
+		// Second update passes None for preimage → COALESCE keeps old value
+		db.update_offramp_status(1, OfframpStatus::Completed, None, Some("dep_tx"), None);
+
+		let got = db.get_offramp_by_id(1).unwrap();
+		assert_eq!(got.status, OfframpStatus::Completed);
+		assert_eq!(got.lightning_preimage.as_deref(), Some("pre_img"));
+		assert_eq!(got.deposit_tx_hash.as_deref(), Some("dep_tx"));
+	}
+
+	#[test]
+	fn update_offramp_cbtc_tx() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off03"));
+
+		db.update_offramp_cbtc_tx(1, "cbtc_tx_hash_xyz");
+		let got = db.get_offramp_by_id(1).unwrap();
+		assert_eq!(got.cbtc_tx_hash, "cbtc_tx_hash_xyz");
+	}
+
+	#[test]
+	fn next_offramp_id_starts_at_1() {
+		let db = test_db();
+		assert_eq!(db.next_offramp_id(), 1);
+	}
+
+	#[test]
+	fn next_offramp_id_increments() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "a"));
+		db.insert_offramp(&make_offramp(2, "b"));
+		assert_eq!(db.next_offramp_id(), 3);
+	}
+}

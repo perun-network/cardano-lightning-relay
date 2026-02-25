@@ -155,7 +155,7 @@ async fn handle_swap_request(
 ) -> Result<Json<SwapResponse>, Json<ErrorResponse>> {
 	// 1. Create LM invoice on Cardano
 	let (invoice_id, description) = cardano_swap::request_swap(
-		&state.operator,
+		&*state.operator,
 		req.amount_cbtc,
 		&req.cardano_address,
 	)
@@ -296,7 +296,7 @@ async fn handle_offramp_request(
 	Json(req): Json<OfframpRequest>,
 ) -> Result<Json<OfframpResponse>, Json<ErrorResponse>> {
 	let (offramp_id, operator_address, payment_hash) = cardano_offramp::request_offramp(
-		&state.operator,
+		&*state.operator,
 		&state.swap_db,
 		&req.bolt11,
 		req.amount_cbtc,

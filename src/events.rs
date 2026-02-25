@@ -286,12 +286,11 @@ pub(crate) fn handle_ldk_events<'a>(
 				write_future.await.unwrap();
 
 				// Check if this is an offramp payment that failed
-				if let (Some(db), Some(op), Some(hash)) = (&swap_db, &operator_agent, &payment_hash) {
-					let op = Arc::clone(op);
+				if let (Some(db), Some(hash)) = (&swap_db, &payment_hash) {
 					let db = Arc::clone(db);
 					let hash_hex = format!("{}", hash);
 					tokio::spawn(async move {
-						cardano_offramp::handle_offramp_payment_failed(op, db, hash_hex).await;
+						cardano_offramp::handle_offramp_payment_failed(db, hash_hex).await;
 					});
 				}
 			},

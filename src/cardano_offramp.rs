@@ -7,6 +7,7 @@
 //!   4. `complete_offramp()` — submit FulfillOfframp TX (deposit cBTC to pool)
 //!   5. `handle_offramp_payment_failed()` — submit CancelOfframp TX on failure
 
+use crate::cardano_ops::CardanoOperator;
 use crate::cardano_swap::address_to_pkh;
 use crate::cli::payment_cmds;
 use crate::helpers::{current_timestamp_ms, query_state_with_retry};
@@ -22,7 +23,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// Returns `(offramp_id, operator_address, payment_hash)` on success.
 pub(crate) async fn request_offramp(
-	operator: &Arc<OperatorAgent>,
+	operator: &impl CardanoOperator,
 	swap_db: &Arc<SwapDb>,
 	bolt11_str: &str,
 	amount_cbtc: i64,
@@ -68,7 +69,7 @@ pub(crate) async fn request_offramp(
 	);
 
 	// 5. Store offramp mapping with AwaitingDeposit status
-	let operator_address = operator.config().operator_address.clone();
+	let operator_address = operator.operator_address().to_string();
 
 	swap_db.insert_offramp(&OfframpMapping {
 		offramp_id,
@@ -155,7 +156,7 @@ pub(crate) async fn process_offramp_deposit(
 
 /// Called from PaymentSent event: submit FulfillOfframp TX to deposit cBTC to pool.
 pub(crate) async fn complete_offramp(
-	operator: Arc<OperatorAgent>,
+	operator: Arc<impl CardanoOperator>,
 	swap_db: Arc<SwapDb>,
 	payment_hash: String,
 	preimage: String,
@@ -189,7 +190,7 @@ pub(crate) async fn complete_offramp(
 	// Query on-chain state to find the offramp entry for FulfillOfframp
 	let offramp_id = mapping.offramp_id;
 	let offramp = match query_state_with_retry(
-		&operator,
+		&*operator,
 		6,
 		std::time::Duration::from_secs(5),
 		&format!("Offramp #{}", offramp_id),
@@ -243,7 +244,6 @@ pub(crate) async fn complete_offramp(
 
 /// Called from PaymentFailed event: submit CancelOfframp TX and mark as failed.
 pub(crate) async fn handle_offramp_payment_failed(
-	_operator: Arc<OperatorAgent>,
 	swap_db: Arc<SwapDb>,
 	payment_hash: String,
 ) {

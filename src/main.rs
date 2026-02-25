@@ -3,6 +3,7 @@ mod args;
 mod background;
 pub mod bitcoind_client;
 mod cardano_offramp;
+mod cardano_ops;
 mod cardano_swap;
 mod cli;
 mod convert;
@@ -13,6 +14,9 @@ mod hex_utils;
 mod mapping;
 mod sweep;
 mod types;
+
+#[cfg(test)]
+mod integration_tests;
 
 use crate::bitcoind_client::BitcoindClient;
 use crate::disk::FilesystemLogger;

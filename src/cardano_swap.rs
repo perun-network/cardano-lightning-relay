@@ -4,9 +4,9 @@
 //! `fulfill_swap()` is called when a Lightning payment is claimed, fulfilling the
 //! LM invoice and sending cBTC to the user's Cardano address.
 
+use crate::cardano_ops::CardanoOperator;
 use crate::helpers::{current_timestamp_ms, query_state_with_retry};
 use crate::mapping::{SwapDb, SwapMapping, SwapStatus};
-use cardano_lightning_client::OperatorAgent;
 use std::sync::Arc;
 
 /// Swap description prefix used in BOLT11 invoices for swap detection.
@@ -18,7 +18,7 @@ const SWAP_PREFIX: &str = "cBTC_SWAP:";
 ///
 /// Returns `(invoice_id, bolt11_description)` on success.
 pub(crate) async fn request_swap(
-	operator: &Arc<OperatorAgent>,
+	operator: &impl CardanoOperator,
 	amount_cbtc: i64,
 	cardano_address: &str,
 ) -> Result<(i64, String), String> {
@@ -72,7 +72,7 @@ pub(crate) fn store_swap_mapping(
 /// Looks up the mapping, builds + submits a FulfillInvoice tx on Cardano,
 /// and updates the mapping status.
 pub(crate) async fn fulfill_swap(
-	operator: Arc<OperatorAgent>,
+	operator: Arc<impl CardanoOperator>,
 	swap_db: Arc<SwapDb>,
 	payment_hash: String,
 ) {
@@ -91,7 +91,7 @@ pub(crate) async fn fulfill_swap(
 	// Query the current state to find the invoice (retry while TX confirms).
 	let invoice_id = mapping.invoice_id;
 	let invoice = match query_state_with_retry(
-		&operator,
+		&*operator,
 		12,
 		std::time::Duration::from_secs(5),
 		&format!("LM invoice #{}", invoice_id),
@@ -158,4 +158,70 @@ pub(crate) fn address_to_pkh(address: &str) -> Result<String, String> {
 	// Bytes 1..29 are the payment key hash
 	let pkh = hex::encode(&data[1..29]);
 	Ok(pkh)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// Build a bech32 Cardano address from raw bytes for testing.
+	fn encode_addr(hrp: &str, header: u8, pkh: &[u8; 28], stake: &[u8; 28]) -> String {
+		use bech32::{ToBase32, Variant};
+		let mut data = vec![header];
+		data.extend_from_slice(pkh);
+		data.extend_from_slice(stake);
+		bech32::encode(hrp, data.to_base32(), Variant::Bech32).unwrap()
+	}
+
+	#[test]
+	fn address_to_pkh_valid_testnet() {
+		let pkh = [0xab; 28];
+		let stake = [0xcd; 28];
+		// header 0x00 = type-0 base address, testnet
+		let addr = encode_addr("addr_test", 0x00, &pkh, &stake);
+
+		let result = address_to_pkh(&addr).unwrap();
+		assert_eq!(result, "ab".repeat(28));
+	}
+
+	#[test]
+	fn address_to_pkh_valid_mainnet() {
+		let pkh = [0x01; 28];
+		let stake = [0x02; 28];
+		// header 0x01 = type-0 base address, mainnet
+		let addr = encode_addr("addr", 0x01, &pkh, &stake);
+
+		let result = address_to_pkh(&addr).unwrap();
+		assert_eq!(result, "01".repeat(28));
+	}
+
+	#[test]
+	fn address_to_pkh_invalid_bech32() {
+		let result = address_to_pkh("not-a-valid-address!!!");
+		assert!(result.is_err());
+		assert!(result.unwrap_err().contains("invalid bech32"));
+	}
+
+	#[test]
+	fn address_to_pkh_wrong_prefix() {
+		// Valid bech32 but with Bitcoin HRP, not Cardano
+		use bech32::{ToBase32, Variant};
+		let data = vec![0u8; 57];
+		let addr = bech32::encode("bc", data.to_base32(), Variant::Bech32).unwrap();
+
+		let result = address_to_pkh(&addr);
+		assert!(result.is_err());
+		assert!(result.unwrap_err().contains("not a Cardano address"));
+	}
+
+	#[test]
+	fn extract_swap_address_with_prefix() {
+		let desc = "cBTC_SWAP:addr_test1qz_something";
+		assert_eq!(extract_swap_address(desc), Some("addr_test1qz_something".to_string()));
+	}
+
+	#[test]
+	fn extract_swap_address_no_prefix() {
+		assert_eq!(extract_swap_address("random description"), None);
+	}
 }
