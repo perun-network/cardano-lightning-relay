@@ -12,6 +12,7 @@
 use crate::cardano_offramp;
 use crate::cardano_swap;
 use crate::cli::payment_cmds;
+use crate::helpers::current_timestamp_ms;
 use crate::mapping::SwapDb;
 use crate::types::{ChannelManager, InboundPaymentInfoStorage, OutboundPaymentInfoStorage};
 use axum::extract::{Path, State};
@@ -155,7 +156,6 @@ async fn handle_swap_request(
 	// 1. Create LM invoice on Cardano
 	let (invoice_id, description) = cardano_swap::request_swap(
 		&state.operator,
-		&state.swap_db,
 		req.amount_cbtc,
 		&req.cardano_address,
 	)
@@ -184,18 +184,13 @@ async fn handle_swap_request(
 	};
 
 	// 3. Store swap mapping
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
-
 	cardano_swap::store_swap_mapping(
 		&state.swap_db,
 		&payment_hash,
 		invoice_id,
 		req.amount_cbtc,
 		&req.cardano_address,
-		now_ms + 3_600_000,
+		current_timestamp_ms() + 3_600_000,
 	);
 
 	Ok(Json(SwapResponse {

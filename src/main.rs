@@ -8,6 +8,7 @@ mod cli;
 mod convert;
 mod disk;
 mod events;
+mod helpers;
 mod hex_utils;
 mod mapping;
 mod sweep;

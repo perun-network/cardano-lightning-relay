@@ -1,5 +1,6 @@
 //! CLI commands for Cardano LM contract operations.
 
+use crate::helpers::current_timestamp_ms;
 use cardano_lightning_client::OperatorAgent;
 use std::sync::Arc;
 
@@ -57,10 +58,7 @@ pub(crate) async fn cancel_expired(operator: &Arc<OperatorAgent>) {
 		},
 	};
 
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
+	let now_ms = current_timestamp_ms();
 
 	let expired: Vec<_> = state.invoices.iter().filter(|i| i.expires_at < now_ms).collect();
 

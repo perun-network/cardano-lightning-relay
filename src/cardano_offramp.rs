@@ -9,6 +9,7 @@
 
 use crate::cardano_swap::address_to_pkh;
 use crate::cli::payment_cmds;
+use crate::helpers::{current_timestamp_ms, query_state_with_retry};
 use crate::mapping::{OfframpMapping, OfframpStatus, SwapDb};
 use crate::types::{ChannelManager, OutboundPaymentInfoStorage};
 use cardano_lightning_client::OperatorAgent;
@@ -47,10 +48,7 @@ pub(crate) async fn request_offramp(
 	let refund_pkh = address_to_pkh(cardano_address)?;
 
 	// 3. Set expiry (1 hour from now)
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
+	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + 3_600_000;
 
 	// 4. Submit CreateOfframp TX on-chain
@@ -189,7 +187,16 @@ pub(crate) async fn complete_offramp(
 	);
 
 	// Query on-chain state to find the offramp entry for FulfillOfframp
-	let offramp = match find_onchain_offramp(&operator, mapping.offramp_id).await {
+	let offramp_id = mapping.offramp_id;
+	let offramp = match query_state_with_retry(
+		&operator,
+		6,
+		std::time::Duration::from_secs(5),
+		&format!("Offramp #{}", offramp_id),
+		|state| state.offramps.iter().find(|o| o.offramp_id == offramp_id).cloned(),
+	)
+	.await
+	{
 		Ok(o) => o,
 		Err(e) => {
 			let msg = format!("failed to find on-chain offramp: {}", e);
@@ -261,40 +268,3 @@ pub(crate) async fn handle_offramp_payment_failed(
 		mapping.offramp_id, mapping.expires_at,
 	);
 }
-
-/// Find the offramp entry in on-chain state, with retries for TX confirmation.
-async fn find_onchain_offramp(
-	operator: &OperatorAgent,
-	offramp_id: i64,
-) -> Result<cardano_lightning_client::Offramp, String> {
-	// Retry a few times waiting for CreateOfframp TX to confirm
-	for attempt in 0..6 {
-		match operator.agent().query_state().await {
-			Ok(state) => {
-				if let Some(offramp) = state.offramps.iter().find(|o| o.offramp_id == offramp_id) {
-					return Ok(offramp.clone());
-				}
-				if attempt < 5 {
-					println!(
-						"Offramp #{}: not yet in on-chain state (attempt {}), waiting...",
-						offramp_id, attempt + 1,
-					);
-					tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-				}
-			},
-			Err(e) => {
-				if attempt < 5 {
-					println!(
-						"Offramp #{}: state query failed ({}), retrying...",
-						offramp_id, e,
-					);
-					tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-				} else {
-					return Err(format!("state query failed after retries: {}", e));
-				}
-			},
-		}
-	}
-	Err(format!("offramp {} not found in on-chain state after retries", offramp_id))
-}
-

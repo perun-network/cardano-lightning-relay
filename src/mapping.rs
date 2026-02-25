@@ -117,18 +117,7 @@ impl SwapDb {
 			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash
 			 FROM swap_mappings WHERE payment_hash = ?1",
 			params![payment_hash],
-			|row| {
-				Ok(SwapMapping {
-					payment_hash: row.get(0)?,
-					invoice_id: row.get(1)?,
-					amount_cbtc: row.get(2)?,
-					cardano_address: row.get(3)?,
-					status: SwapStatus::from_str(&row.get::<_, String>(4)?),
-					created_at: row.get(5)?,
-					expires_at: row.get(6)?,
-					cardano_tx_hash: row.get(7)?,
-				})
-			},
+			|row| Ok(row_to_swap(row)),
 		).ok()
 	}
 
@@ -148,16 +137,7 @@ impl SwapDb {
 		).expect("failed to prepare expired query");
 
 		stmt.query_map(params![now_ms], |row| {
-			Ok(SwapMapping {
-				payment_hash: row.get(0)?,
-				invoice_id: row.get(1)?,
-				amount_cbtc: row.get(2)?,
-				cardano_address: row.get(3)?,
-				status: SwapStatus::from_str(&row.get::<_, String>(4)?),
-				created_at: row.get(5)?,
-				expires_at: row.get(6)?,
-				cardano_tx_hash: row.get(7)?,
-			})
+			Ok(row_to_swap(row))
 		}).expect("failed to query expired mappings")
 		.filter_map(|r| r.ok())
 		.collect()
@@ -301,6 +281,19 @@ pub(crate) struct OfframpMapping {
 	pub cardano_offramp_tx_hash: Option<String>,
 	pub refund_address: String,
 	pub expires_at: i64,
+}
+
+fn row_to_swap(row: &rusqlite::Row) -> SwapMapping {
+	SwapMapping {
+		payment_hash: row.get(0).unwrap(),
+		invoice_id: row.get(1).unwrap(),
+		amount_cbtc: row.get(2).unwrap(),
+		cardano_address: row.get(3).unwrap(),
+		status: SwapStatus::from_str(&row.get::<_, String>(4).unwrap()),
+		created_at: row.get(5).unwrap(),
+		expires_at: row.get(6).unwrap(),
+		cardano_tx_hash: row.get(7).unwrap(),
+	}
 }
 
 fn row_to_offramp(row: &rusqlite::Row) -> OfframpMapping {

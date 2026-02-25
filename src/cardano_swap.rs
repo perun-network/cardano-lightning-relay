@@ -4,6 +4,7 @@
 //! `fulfill_swap()` is called when a Lightning payment is claimed, fulfilling the
 //! LM invoice and sending cBTC to the user's Cardano address.
 
+use crate::helpers::{current_timestamp_ms, query_state_with_retry};
 use crate::mapping::{SwapDb, SwapMapping, SwapStatus};
 use cardano_lightning_client::OperatorAgent;
 use std::sync::Arc;
@@ -18,18 +19,12 @@ const SWAP_PREFIX: &str = "cBTC_SWAP:";
 /// Returns `(invoice_id, bolt11_description)` on success.
 pub(crate) async fn request_swap(
 	operator: &Arc<OperatorAgent>,
-	_swap_db: &Arc<SwapDb>,
 	amount_cbtc: i64,
 	cardano_address: &str,
 ) -> Result<(i64, String), String> {
 	let owner_pkh = address_to_pkh(cardano_address)?;
 
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
-
-	// 1 hour expiry
+	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + 3_600_000;
 
 	// Create LM invoice on Cardano
@@ -48,9 +43,6 @@ pub(crate) async fn request_swap(
 	// The BOLT11 description encodes the Cardano address for swap detection
 	let description = format!("{}{}", SWAP_PREFIX, cardano_address);
 
-	// We don't store the mapping yet — the caller creates the BOLT11 invoice
-	// and then calls store_swap_mapping with the payment_hash.
-
 	Ok((invoice_id, description))
 }
 
@@ -63,18 +55,13 @@ pub(crate) fn store_swap_mapping(
 	cardano_address: &str,
 	expires_at: i64,
 ) {
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
-
 	swap_db.insert(&SwapMapping {
 		payment_hash: payment_hash.to_string(),
 		invoice_id,
 		amount_cbtc,
 		cardano_address: cardano_address.to_string(),
 		status: SwapStatus::Pending,
-		created_at: now_ms,
+		created_at: current_timestamp_ms(),
 		expires_at,
 		cardano_tx_hash: None,
 	});
@@ -101,36 +88,20 @@ pub(crate) async fn fulfill_swap(
 
 	swap_db.update_status(&payment_hash, SwapStatus::Fulfilling, None);
 
-	// Query the current state to find the invoice.
-	// The CreateInvoice TX may not be confirmed yet, so retry a few times.
-	let mut invoice = None;
-	for attempt in 0..12 {
-		match operator.agent().query_state().await {
-			Ok(state) => {
-				if let Some(i) = state.invoices.iter().find(|i| i.invoice_id == mapping.invoice_id) {
-					invoice = Some(i.clone());
-					break;
-				}
-				if attempt < 11 {
-					println!("Waiting for LM invoice #{} to confirm on-chain (attempt {}/12)...", mapping.invoice_id, attempt + 1);
-					tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-				}
-			},
-			Err(e) => {
-				if attempt == 11 {
-					println!("ERROR: failed to query pool state for swap {}: {}", payment_hash, e);
-					swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
-					return;
-				}
-				tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-			},
-		}
-	}
-
-	let invoice = match invoice {
-		Some(i) => i,
-		None => {
-			println!("ERROR: LM invoice #{} not found for swap {} after retries", mapping.invoice_id, payment_hash);
+	// Query the current state to find the invoice (retry while TX confirms).
+	let invoice_id = mapping.invoice_id;
+	let invoice = match query_state_with_retry(
+		&operator,
+		12,
+		std::time::Duration::from_secs(5),
+		&format!("LM invoice #{}", invoice_id),
+		|state| state.invoices.iter().find(|i| i.invoice_id == invoice_id).cloned(),
+	)
+	.await
+	{
+		Ok(i) => i,
+		Err(e) => {
+			println!("ERROR: {} for swap {}", e, payment_hash);
 			swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
 			return;
 		},

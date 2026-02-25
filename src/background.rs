@@ -1,4 +1,5 @@
 use crate::cli;
+use crate::helpers::current_timestamp_ms;
 use crate::mapping::{SwapDb, SwapStatus};
 use crate::types::{ChannelManager, NetworkGraph, PeerManager};
 use cardano_lightning_client::OperatorAgent;
@@ -90,10 +91,7 @@ pub(crate) async fn monitor_expired_swaps(
 	loop {
 		interval.tick().await;
 
-		let now_ms = std::time::SystemTime::now()
-			.duration_since(std::time::UNIX_EPOCH)
-			.unwrap()
-			.as_millis() as i64;
+		let now_ms = current_timestamp_ms();
 
 		let expired = swap_db.get_expired_pending(now_ms);
 		for mapping in &expired {
