@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [feat-cardano]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cardano-lightning-relay
+      - uses: actions/checkout@v4
+        with:
+          repository: perun-network/cardano-lightning-client
+          path: cardano-lightning-client
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cardano-lightning-relay
+      - run: cargo test
+        working-directory: cardano-lightning-relay

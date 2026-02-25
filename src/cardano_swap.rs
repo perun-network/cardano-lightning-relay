@@ -4,8 +4,9 @@
 //! `fulfill_swap()` is called when a Lightning payment is claimed, fulfilling the
 //! LM invoice and sending cBTC to the user's Cardano address.
 
+use crate::cardano_ops::CardanoOperator;
+use crate::helpers::{current_timestamp_ms, query_state_with_retry};
 use crate::mapping::{SwapDb, SwapMapping, SwapStatus};
-use cardano_lightning_client::OperatorAgent;
 use std::sync::Arc;
 
 /// Swap description prefix used in BOLT11 invoices for swap detection.
@@ -17,19 +18,13 @@ const SWAP_PREFIX: &str = "cBTC_SWAP:";
 ///
 /// Returns `(invoice_id, bolt11_description)` on success.
 pub(crate) async fn request_swap(
-	operator: &Arc<OperatorAgent>,
-	_swap_db: &Arc<SwapDb>,
+	operator: &impl CardanoOperator,
 	amount_cbtc: i64,
 	cardano_address: &str,
 ) -> Result<(i64, String), String> {
 	let owner_pkh = address_to_pkh(cardano_address)?;
 
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
-
-	// 1 hour expiry
+	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + 3_600_000;
 
 	// Create LM invoice on Cardano
@@ -48,9 +43,6 @@ pub(crate) async fn request_swap(
 	// The BOLT11 description encodes the Cardano address for swap detection
 	let description = format!("{}{}", SWAP_PREFIX, cardano_address);
 
-	// We don't store the mapping yet — the caller creates the BOLT11 invoice
-	// and then calls store_swap_mapping with the payment_hash.
-
 	Ok((invoice_id, description))
 }
 
@@ -63,18 +55,13 @@ pub(crate) fn store_swap_mapping(
 	cardano_address: &str,
 	expires_at: i64,
 ) {
-	let now_ms = std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.unwrap()
-		.as_millis() as i64;
-
 	swap_db.insert(&SwapMapping {
 		payment_hash: payment_hash.to_string(),
 		invoice_id,
 		amount_cbtc,
 		cardano_address: cardano_address.to_string(),
 		status: SwapStatus::Pending,
-		created_at: now_ms,
+		created_at: current_timestamp_ms(),
 		expires_at,
 		cardano_tx_hash: None,
 	});
@@ -85,7 +72,7 @@ pub(crate) fn store_swap_mapping(
 /// Looks up the mapping, builds + submits a FulfillInvoice tx on Cardano,
 /// and updates the mapping status.
 pub(crate) async fn fulfill_swap(
-	operator: Arc<OperatorAgent>,
+	operator: Arc<impl CardanoOperator>,
 	swap_db: Arc<SwapDb>,
 	payment_hash: String,
 ) {
@@ -101,36 +88,20 @@ pub(crate) async fn fulfill_swap(
 
 	swap_db.update_status(&payment_hash, SwapStatus::Fulfilling, None);
 
-	// Query the current state to find the invoice.
-	// The CreateInvoice TX may not be confirmed yet, so retry a few times.
-	let mut invoice = None;
-	for attempt in 0..12 {
-		match operator.agent().query_state().await {
-			Ok(state) => {
-				if let Some(i) = state.invoices.iter().find(|i| i.invoice_id == mapping.invoice_id) {
-					invoice = Some(i.clone());
-					break;
-				}
-				if attempt < 11 {
-					println!("Waiting for LM invoice #{} to confirm on-chain (attempt {}/12)...", mapping.invoice_id, attempt + 1);
-					tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-				}
-			},
-			Err(e) => {
-				if attempt == 11 {
-					println!("ERROR: failed to query pool state for swap {}: {}", payment_hash, e);
-					swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
-					return;
-				}
-				tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-			},
-		}
-	}
-
-	let invoice = match invoice {
-		Some(i) => i,
-		None => {
-			println!("ERROR: LM invoice #{} not found for swap {} after retries", mapping.invoice_id, payment_hash);
+	// Query the current state to find the invoice (retry while TX confirms).
+	let invoice_id = mapping.invoice_id;
+	let invoice = match query_state_with_retry(
+		&*operator,
+		12,
+		std::time::Duration::from_secs(5),
+		&format!("LM invoice #{}", invoice_id),
+		|state| state.invoices.iter().find(|i| i.invoice_id == invoice_id).cloned(),
+	)
+	.await
+	{
+		Ok(i) => i,
+		Err(e) => {
+			println!("ERROR: {} for swap {}", e, payment_hash);
 			swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
 			return;
 		},
@@ -187,4 +158,70 @@ pub(crate) fn address_to_pkh(address: &str) -> Result<String, String> {
 	// Bytes 1..29 are the payment key hash
 	let pkh = hex::encode(&data[1..29]);
 	Ok(pkh)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// Build a bech32 Cardano address from raw bytes for testing.
+	fn encode_addr(hrp: &str, header: u8, pkh: &[u8; 28], stake: &[u8; 28]) -> String {
+		use bech32::{ToBase32, Variant};
+		let mut data = vec![header];
+		data.extend_from_slice(pkh);
+		data.extend_from_slice(stake);
+		bech32::encode(hrp, data.to_base32(), Variant::Bech32).unwrap()
+	}
+
+	#[test]
+	fn address_to_pkh_valid_testnet() {
+		let pkh = [0xab; 28];
+		let stake = [0xcd; 28];
+		// header 0x00 = type-0 base address, testnet
+		let addr = encode_addr("addr_test", 0x00, &pkh, &stake);
+
+		let result = address_to_pkh(&addr).unwrap();
+		assert_eq!(result, "ab".repeat(28));
+	}
+
+	#[test]
+	fn address_to_pkh_valid_mainnet() {
+		let pkh = [0x01; 28];
+		let stake = [0x02; 28];
+		// header 0x01 = type-0 base address, mainnet
+		let addr = encode_addr("addr", 0x01, &pkh, &stake);
+
+		let result = address_to_pkh(&addr).unwrap();
+		assert_eq!(result, "01".repeat(28));
+	}
+
+	#[test]
+	fn address_to_pkh_invalid_bech32() {
+		let result = address_to_pkh("not-a-valid-address!!!");
+		assert!(result.is_err());
+		assert!(result.unwrap_err().contains("invalid bech32"));
+	}
+
+	#[test]
+	fn address_to_pkh_wrong_prefix() {
+		// Valid bech32 but with Bitcoin HRP, not Cardano
+		use bech32::{ToBase32, Variant};
+		let data = vec![0u8; 57];
+		let addr = bech32::encode("bc", data.to_base32(), Variant::Bech32).unwrap();
+
+		let result = address_to_pkh(&addr);
+		assert!(result.is_err());
+		assert!(result.unwrap_err().contains("not a Cardano address"));
+	}
+
+	#[test]
+	fn extract_swap_address_with_prefix() {
+		let desc = "cBTC_SWAP:addr_test1qz_something";
+		assert_eq!(extract_swap_address(desc), Some("addr_test1qz_something".to_string()));
+	}
+
+	#[test]
+	fn extract_swap_address_no_prefix() {
+		assert_eq!(extract_swap_address("random description"), None);
+	}
 }
