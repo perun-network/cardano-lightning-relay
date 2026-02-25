@@ -1,4 +1,5 @@
 use crate::bitcoind_client::BitcoindClient;
+use crate::cardano_offramp;
 use crate::cardano_swap;
 use crate::cli;
 use crate::disk::{INBOUND_PAYMENTS_FNAME, OUTBOUND_PAYMENTS_FNAME};
@@ -198,6 +199,19 @@ pub(crate) fn handle_ldk_events<'a>(
 					fs_store.write("", "", OUTBOUND_PAYMENTS_FNAME, outbound.encode())
 				};
 				write_future.await.unwrap();
+
+				// Check if this is an offramp payment and trigger pool deposit
+				if let (Some(db), Some(op)) = (&swap_db, &operator_agent) {
+					let hash_hex = format!("{}", payment_hash);
+					if db.get_offramp_by_payment_hash(&hash_hex).is_some() {
+						let op = Arc::clone(op);
+						let db = Arc::clone(db);
+						let preimage_hex = format!("{}", payment_preimage);
+						tokio::spawn(async move {
+							cardano_offramp::complete_offramp(op, db, hash_hex, preimage_hex).await;
+						});
+					}
+				}
 			},
 			Event::OpenChannelRequest {
 				ref temporary_channel_id,
@@ -270,6 +284,16 @@ pub(crate) fn handle_ldk_events<'a>(
 					fs_store.write("", "", OUTBOUND_PAYMENTS_FNAME, outbound.encode())
 				};
 				write_future.await.unwrap();
+
+				// Check if this is an offramp payment that failed
+				if let (Some(db), Some(op), Some(hash)) = (&swap_db, &operator_agent, &payment_hash) {
+					let op = Arc::clone(op);
+					let db = Arc::clone(db);
+					let hash_hex = format!("{}", hash);
+					tokio::spawn(async move {
+						cardano_offramp::handle_offramp_payment_failed(op, db, hash_hex).await;
+					});
+				}
 			},
 			Event::InvoiceReceived { .. } => {
 				// We don't use the manual invoice payment logic, so this event should never be seen.

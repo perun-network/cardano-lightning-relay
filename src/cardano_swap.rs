@@ -167,7 +167,7 @@ pub(crate) fn extract_swap_address(description: &str) -> Option<String> {
 }
 
 /// Derive payment key hash from a bech32 Cardano address.
-fn address_to_pkh(address: &str) -> Result<String, String> {
+pub(crate) fn address_to_pkh(address: &str) -> Result<String, String> {
 	use bech32::FromBase32;
 	// Shelley addresses: 1-byte header + 28-byte PKH + 28-byte stake part
 	let (hrp, data5, _variant) = bech32::decode(address)

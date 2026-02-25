@@ -2,6 +2,7 @@ mod api;
 mod args;
 mod background;
 pub mod bitcoind_client;
+mod cardano_offramp;
 mod cardano_swap;
 mod cli;
 mod convert;
@@ -681,6 +682,8 @@ async fn start_ldk() {
 			swap_db: Arc::clone(db),
 			channel_manager: Arc::clone(&channel_manager),
 			inbound_payments: Arc::clone(&inbound_payments),
+			outbound_payments: Arc::clone(&outbound_payments),
+			fs_store: Arc::clone(&fs_store),
 		};
 		let api_port: u16 = std::env::var("CARDANO_API_PORT")
 			.unwrap_or_else(|_| "3000".into())
