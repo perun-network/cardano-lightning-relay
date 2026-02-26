@@ -55,8 +55,6 @@ export CARDANO_OPERATOR_PKH=<pkh_hex>
   user:pass@127.0.0.1:18443 ./ldk_data 9735 regtest
 ```
 
-All Cardano env vars are populated from `credentials/deployment.json` by the E2E test scripts.
-
 ## Preprod
 
 For Cardano Preprod deployment, see the [`feat-deploy-preprod`](https://github.com/perun-network/cardano-lightning-relay/tree/feat-deploy-preprod) branch. The key differences:

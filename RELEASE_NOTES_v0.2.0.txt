@@ -1,0 +1,18 @@
+## v0.2.0 - Casimir
+
+Lightning-to-Cardano bridge relay combining an LDK node with the Liquidity Manager Plutus V3 contract.
+
+### Features
+- Onramp swaps (Lightning BTC → Cardano cBTC) via CreateInvoice/FulfillInvoice
+- Offramp swaps (Cardano cBTC → Lightning BTC) via CreateOfframp/FulfillOfframp
+- Pool liquidity management (deposit/withdraw) through REST API and CLI
+- Interactive CLI with full LDK + Cardano commands
+
+### Testing
+- 5 complete channel lifecycles on local Bitcoin regtest (30/30 assertions passed)
+- 10 Connector-driven Preprod transactions (5 deposits + 5 withdrawals)
+- E2E test suite using Expect scripts
+
+### Infrastructure
+- CI (cargo test) on all branches
+- Apache-2.0 license

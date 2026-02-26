@@ -1,0 +1,23 @@
+# Build artifacts
+**/target/
+
+# Git
+**/.git/
+**/.gitignore
+
+# LDK node data
+**/ldk_data_*/
+
+# IDE / editor
+**/.vscode/
+**/.idea/
+**/*.swp
+
+# Nix
+**/flake.lock
+**/result
+
+# Misc
+**/*.log
+**/*.exp
+**/test_data/
