@@ -1,0 +1,860 @@
+==========================================
+  MS2 Evidence: 5 Channel Lifecycles
+==========================================
+
+Swap amount:   50000 cBTC per cycle
+Channel size:  500000 sats per cycle
+Cycles:        5
+
+
+=== Section 0: Validating prerequisites ===
+
+bitcoind: OK
+testwallet: OK
+yaci-devkit API: OK
+deployment.json: OK
+plutus-applied.json: OK
+Binaries: OK
+
+=== Section 1: Extract config ===
+
+Operator address:  addr_test1vzjv879ne7guc2mzdmlh0yyj0dzgmyramz04zzywjzpgs5srxg9re
+Script address:    addr_test1wqhfr2w80tsft5m4td57ewzxcnnfdxyecl8r3svyv0fu8scwc7qqp
+cBTC policy:       9e370c09dd12960d273178aadc1ed7a37927bb1da36b22ac439fb672
+cBTC asset name:   63425443
+
+=== Section 2: Extract script CBOR ===
+
+Script CBOR -> /tmp/cardano_script_cbor.hex (10298 hex chars)
+
+=== Section 3: Create ADA-only collateral UTxOs ===
+
+Creating 14 ADA-only UTxOs (10 ADA each) for collateral...
+14 collateral UTxOs created
+
+=== Section 4: Clean LDK data + start payer node ===
+
+Cleaned old LDK data directories
+spawn /home/ilja/pc-work/ldk-sample/target/release/ldk-sample ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=@127.0.0.1:18443 /home/ilja/pc-work/ldk-sample/ldk_data_standard 9736 regtest
+LDK startup successful. Enter "help" to view available commands. Press Ctrl-D to quit.
+LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs
+Local Node ID is 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd.
+> Payer node ID: 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd
+Payer node ready
+
+=== Section 5: Start relay ===
+
+spawn /home/ilja/pc-work/cardano-lightning-relay/target/release/cardano-lightning-relay ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=@127.0.0.1:18443 /home/ilja/pc-work/cardano-lightning-relay/ldk_data_cardano 9735 regtest
+Cardano operator agent initialized.
+Cardano swap API listening on port 3000
+LDK startup successful. Enter "help" to view available commands. Press Ctrl-D to quit.
+LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs
+Local Node ID is 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0.
+> Relay node ID: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+Relay ready (API on port 3000)
+
+=== Section 6: Initial pool state ===
+
+Initial pool liquidity: 50000000 cBTC
+
+==========================================
+  Section 7: 5 Channel Lifecycles
+==========================================
+
+####################################################
+  CYCLE 1 / 5
+####################################################
+
+--- Cycle 1: Connect peers ---
+connectpeer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735
+SUCCESS: connected to peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> Peer connected
+--- Cycle 1: Open channel (500000 sats) ---
+openchannel 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735 500000
+EVENT: initiated channel with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0. 
+> Channel initiated
+--- Cycle 1: Wait for channel ready ---
+Mined 6 blocks
+Waiting for nodes to sync...
+
+EVENT: Channel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is pending awaiting funding lock-in!
+> listchannels
+[
+	{
+		channel_id: aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054,
+		funding_txid: 5550066a6a18dd8e046eaf6a297aa54d2f24326d964eee19b5c9a007b8a4d4ae,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 1/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054,
+		funding_txid: 5550066a6a18dd8e046eaf6a297aa54d2f24326d964eee19b5c9a007b8a4d4ae,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 461794883731457,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 2/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054,
+		funding_txid: 5550066a6a18dd8e046eaf6a297aa54d2f24326d964eee19b5c9a007b8a4d4ae,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 461794883731457,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 3/15), mining...
+Mined 2 blocks
+
+EVENT: Channel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is ready to be used!
+> listchannels
+[
+	{
+		channel_id: aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054,
+		funding_txid: 5550066a6a18dd8e046eaf6a297aa54d2f24326d964eee19b5c9a007b8a4d4ae,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 461794883731457,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel is ready (attempt 4)
+listchannels
+[
+	{
+		channel_id: aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054,
+		funding_txid: 5550066a6a18dd8e046eaf6a297aa54d2f24326d964eee19b5c9a007b8a4d4ae,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 461794883731457,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID: aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054
+  PASS C1-1: channel became ready
+Pool before swap: 50000000 cBTC
+--- Cycle 1: Request swap (50000 cBTC) ---
+Response: {"invoice_id":1,"bolt11":"lnbcrt500n1p56qm4edr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5whvxcppsuryhn6pntfq8ppak5hlwnkfm6k5dxlhyl08hx74tj2rqsp5lg08h3vsm7ar594ha4arnf48a5je046j5g0ffegyzarmu6mjtsvq9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqqsvgqquqqqqlgqqqqqqqqfqy3pmgvy73rcd500pahuz2dn770r3rjkztpyj6awlz7k7cy5peyu928culm9520yuu697fvma9hn7cvhdymc54lykd8pht46wunscctqqnc284s","payment_hash":"75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286"}
+Payment hash: 75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286
+BOLT11: lnbcrt500n1p56qm4edr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva...
+--- Cycle 1: Pay invoice ---
+sendpayment lnbcrt500n1p56qm4edr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5whvxcppsuryhn6pntfq8ppak5hlwnkfm6k5dxlhyl08hx74tj2rqsp5lg08h3vsm7ar594ha4arnf48a5je046j5g0ffegyzarmu6mjtsvq9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqqsvgqquqqqqlgqqqqqqqqfqy3pmgvy73rcd500pahuz2dn770r3rjkztpyj6awlz7k7cy5peyu928culm9520yuu697fvma9hn7cvhdymc54lykd8pht46wunscctqqnc284s
+EVENT: initiated sending 50000 msats to 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286 with preimage d4e277903aa69f69f42de2c42397ee0e5c4e9dfa2dcf4e64dc370d5997031b14
+> PAYMENT SUCCESS
+  PASS C1-2: Lightning payment succeeded
+--- Cycle 1: Poll swap status (120s max) ---
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Swap COMPLETED!
+Cardano TX hash: 4514fd792bc37ba45bc59129ec8f67ee5e531cfe3ce40799a9b67a97a8e1bd54
+  PASS C1-3: swap status = Completed
+Pool after swap: 49950000 cBTC
+  PASS C1-4: pool decreased by 50000 cBTC (== 50000)
+--- Cycle 1: Close channel ---
+closechannel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+EVENT: initiating channel close
+> Channel close initiated
+Mining blocks for close confirmation...
+Mined 6 blocks
+Mined 6 blocks
+
+EVENT: Channel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 with counterparty 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 closed due to: LocallyInitiatedCooperativeClosure
+> listchannels
+[]
+> Channel list empty (closed)
+Mined 6 blocks
+  PASS C1-5: channel closed (list empty)
+
+  Cycle 1 complete: channel=aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 hash=75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286 status=Completed pool=49950000
+
+####################################################
+  CYCLE 2 / 5
+####################################################
+
+--- Cycle 2: Connect peers ---
+connectpeer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735
+SUCCESS: connected to peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> Peer connected
+--- Cycle 2: Open channel (500000 sats) ---
+openchannel 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735 500000
+EVENT: initiated channel with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0. 
+Channel initiated
+> --- Cycle 2: Wait for channel ready ---
+Mined 6 blocks
+Waiting for nodes to sync...
+
+EVENT: Channel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is pending awaiting funding lock-in!
+> listchannels
+[
+	{
+		channel_id: 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b,
+		funding_txid: 5a19661eb1070c71dd942a43f6ba9860bdf861c4a8dae7b3eac884f7eadcae1e,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 1/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b,
+		funding_txid: 5a19661eb1070c71dd942a43f6ba9860bdf861c4a8dae7b3eac884f7eadcae1e,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 494780232564737,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 2/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b,
+		funding_txid: 5a19661eb1070c71dd942a43f6ba9860bdf861c4a8dae7b3eac884f7eadcae1e,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 494780232564737,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 3/15), mining...
+Mined 2 blocks
+
+EVENT: Channel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is ready to be used!
+> listchannels
+[
+	{
+		channel_id: 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b,
+		funding_txid: 5a19661eb1070c71dd942a43f6ba9860bdf861c4a8dae7b3eac884f7eadcae1e,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 494780232564737,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+	Channel is ready (attempt 4)
+	outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> listchannels
+[
+	{
+		channel_id: 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b,
+		funding_txid: 5a19661eb1070c71dd942a43f6ba9860bdf861c4a8dae7b3eac884f7eadcae1e,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 494780232564737,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID: 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b
+  PASS C2-1: channel became ready
+Pool before swap: 49950000 cBTC
+--- Cycle 2: Request swap (50000 cBTC) ---
+Response: {"invoice_id":2,"bolt11":"lnbcrt500n1p56qmhkdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5sdvyseahk3xjjjxcemgkcewmxw8mcacmnk3sg7hwncckmarm4k7ssp5xpnzuj22y0v0wkcad4ylska5udzg642yjpe4azxgnex7h2987y5q9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqqq6qqq5qqqqlgqqqqqqqqfqprgju07mrf7lvvpe6ly5j9py47v7u43e6c3c6jz32rc02qlftyfs4uyg60yw4ugvzkhwstlk9eh8gy4vcj58hnvlpl48l0aryan9dvgpzyx3et","payment_hash":"83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd"}
+Payment hash: 83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd
+BOLT11: lnbcrt500n1p56qmhkdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva...
+--- Cycle 2: Pay invoice ---
+sendpayment lnbcrt500n1p56qmhkdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5sdvyseahk3xjjjxcemgkcewmxw8mcacmnk3sg7hwncckmarm4k7ssp5xpnzuj22y0v0wkcad4ylska5udzg642yjpe4azxgnex7h2987y5q9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqqq6qqq5qqqqlgqqqqqqqqfqprgju07mrf7lvvpe6ly5j9py47v7u43e6c3c6jz32rc02qlftyfs4uyg60yw4ugvzkhwstlk9eh8gy4vcj58hnvlpl48l0aryan9dvgpzyx3et
+EVENT: initiated sending 50000 msats to 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd with preimage feee49f299e898f47f337f5bd882998c50523c8a1c3e3c6a9f7ddef82f5a718c
+> PAYMENT SUCCESS
+  PASS C2-2: Lightning payment succeeded
+--- Cycle 2: Poll swap status (120s max) ---
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Swap COMPLETED!
+Cardano TX hash: 10e2452f3ed31b4171b612405111eefd6b3211db13c9e0f2e97ce5ea8cc2bfce
+  PASS C2-3: swap status = Completed
+Pool after swap: 49900000 cBTC
+  PASS C2-4: pool decreased by 50000 cBTC (== 50000)
+--- Cycle 2: Close channel ---
+closechannel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+EVENT: initiating channel close
+> Channel close initiated
+Mining blocks for close confirmation...
+Mined 6 blocks
+Mined 6 blocks
+
+EVENT: Channel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b with counterparty 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 closed due to: LocallyInitiatedCooperativeClosure
+> listchannels
+[]
+> Channel list empty (closed)
+Mined 6 blocks
+  PASS C2-5: channel closed (list empty)
+
+  Cycle 2 complete: channel=1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b hash=83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd status=Completed pool=49900000
+
+####################################################
+  CYCLE 3 / 5
+####################################################
+
+--- Cycle 3: Connect peers ---
+connectpeer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735
+SUCCESS: connected to peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> Peer connected
+--- Cycle 3: Open channel (500000 sats) ---
+openchannel 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735 500000
+EVENT: initiated channel with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0. 
+> Channel initiated
+--- Cycle 3: Wait for channel ready ---
+Mined 6 blocks
+Waiting for nodes to sync...
+
+EVENT: Channel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is pending awaiting funding lock-in!
+> listchannels
+[
+	{
+		channel_id: ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3,
+		funding_txid: e29af0cbaefe777c26c373a1e5613784770767e7565362b97a7d1e8feee75eff,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 1/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3,
+		funding_txid: e29af0cbaefe777c26c373a1e5613784770767e7565362b97a7d1e8feee75eff,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 527765581398017,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 2/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3,
+		funding_txid: e29af0cbaefe777c26c373a1e5613784770767e7565362b97a7d1e8feee75eff,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 527765581398017,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 3/15), mining...
+Mined 2 blocks
+
+EVENT: Channel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is ready to be used!
+> listchannels
+[
+	{
+		channel_id: ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3,
+		funding_txid: e29af0cbaefe777c26c373a1e5613784770767e7565362b97a7d1e8feee75eff,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 527765581398017,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel is ready (attempt 4)
+listchannels
+[
+	{
+		channel_id: ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3,
+		funding_txid: e29af0cbaefe777c26c373a1e5613784770767e7565362b97a7d1e8feee75eff,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 527765581398017,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID: ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3
+  PASS C3-1: channel became ready
+Pool before swap: 49900000 cBTC
+--- Cycle 3: Request swap (50000 cBTC) ---
+Response: {"invoice_id":3,"bolt11":"lnbcrt500n1p56qmendr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5dq50ef3zqx65hsqn59mwjs89q0avplkku08rw8jme73ftzyunu4qsp57zcsv32x7qpdn42zd9rdkx6tr8za8dzxv0z5g2tdypjqsmgsxwsq9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqq9kcqqsqqqqlgqqqqqqqqfq88gwq3utflkc5yqxez7k5cpypn400tc8lvkp9hkv8jsg9nr8ex6qasawpjxf5mk75cjcg6djkmz2vrk3klhjhuqqscxqc59acfljvygpqgqxww","payment_hash":"6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a"}
+Payment hash: 6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a
+BOLT11: lnbcrt500n1p56qmendr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva...
+--- Cycle 3: Pay invoice ---
+sendpayment lnbcrt500n1p56qmendr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5dq50ef3zqx65hsqn59mwjs89q0avplkku08rw8jme73ftzyunu4qsp57zcsv32x7qpdn42zd9rdkx6tr8za8dzxv0z5g2tdypjqsmgsxwsq9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqq9kcqqsqqqqlgqqqqqqqqfq88gwq3utflkc5yqxez7k5cpypn400tc8lvkp9hkv8jsg9nr8ex6qasawpjxf5mk75cjcg6djkmz2vrk3klhjhuqqscxqc59acfljvygpqgqxww
+EVENT: initiated sending 50000 msats to 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a with preimage 909ac080f068dfd9783c9f6fa0a7ee1fa071cc6ea57f085fc67b905c87267b9b
+> PAYMENT SUCCESS
+  PASS C3-2: Lightning payment succeeded
+--- Cycle 3: Poll swap status (120s max) ---
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Swap COMPLETED!
+Cardano TX hash: 2219a48e374cc0c835233ab4a2e231cb7ccf631e1a857afc896cbc5a1b707e62
+  PASS C3-3: swap status = Completed
+Pool after swap: 49850000 cBTC
+  PASS C3-4: pool decreased by 50000 cBTC (== 50000)
+--- Cycle 3: Close channel ---
+closechannel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+EVENT: initiating channel close
+> Channel close initiated
+Mining blocks for close confirmation...
+Mined 6 blocks
+Mined 6 blocks
+
+EVENT: Channel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 with counterparty 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 closed due to: LocallyInitiatedCooperativeClosure
+> listchannels
+[]
+> Channel list empty (closed)
+Mined 6 blocks
+  PASS C3-5: channel closed (list empty)
+
+  Cycle 3 complete: channel=ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 hash=6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a status=Completed pool=49850000
+
+####################################################
+  CYCLE 4 / 5
+####################################################
+
+--- Cycle 4: Connect peers ---
+connectpeer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735
+SUCCESS: connected to peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> Peer connected
+--- Cycle 4: Open channel (500000 sats) ---
+openchannel 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735 500000
+EVENT: initiated channel with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0. 
+> Channel initiated
+--- Cycle 4: Wait for channel ready ---
+Mined 6 blocks
+Waiting for nodes to sync...
+
+EVENT: Channel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is pending awaiting funding lock-in!
+> listchannels
+[
+	{
+		channel_id: 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48,
+		funding_txid: 48ab4fcfcbb8fc340c4fecf1ce6b7ca34bc408950be88774e955811962908e69,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 1/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48,
+		funding_txid: 48ab4fcfcbb8fc340c4fecf1ce6b7ca34bc408950be88774e955811962908e69,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 560750930231296,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 2/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48,
+		funding_txid: 48ab4fcfcbb8fc340c4fecf1ce6b7ca34bc408950be88774e955811962908e69,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 560750930231296,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 3/15), mining...
+Mined 2 blocks
+
+EVENT: Channel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is ready to be used!
+> listchannels
+[
+	{
+		channel_id: 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48,
+		funding_txid: 48ab4fcfcbb8fc340c4fecf1ce6b7ca34bc408950be88774e955811962908e69,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 560750930231296,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel is ready (attempt 4)
+listchannels
+[
+	{
+		channel_id: 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48,
+		funding_txid: 48ab4fcfcbb8fc340c4fecf1ce6b7ca34bc408950be88774e955811962908e69,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 560750930231296,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID: 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48
+  PASS C4-1: channel became ready
+Pool before swap: 49850000 cBTC
+--- Cycle 4: Request swap (50000 cBTC) ---
+Response: {"invoice_id":4,"bolt11":"lnbcrt500n1p56qmmsdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5dxsnc0nl3ckctr6t0hgq7l709v9w623lplzmpxgfauw84aez878qsp5923phqfky0un7q40urv6yna3fsdn44kyp6q8pwzneqz3n5m6l9yq9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqq0hsqq5qqqqlgqqqqqqqqfqrklz38u79wphqjdlkd26rnc3t8stdaapmm48g7usly0lhld9r80x53xqpgny6hhnsf2sjysjgdrkdnt6q8dergstgq7xd7sxl68llacqax3d43","payment_hash":"69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e"}
+Payment hash: 69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e
+BOLT11: lnbcrt500n1p56qmmsdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva...
+--- Cycle 4: Pay invoice ---
+sendpayment lnbcrt500n1p56qmmsdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp5dxsnc0nl3ckctr6t0hgq7l709v9w623lplzmpxgfauw84aez878qsp5923phqfky0un7q40urv6yna3fsdn44kyp6q8pwzneqz3n5m6l9yq9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqq0hsqq5qqqqlgqqqqqqqqfqrklz38u79wphqjdlkd26rnc3t8stdaapmm48g7usly0lhld9r80x53xqpgny6hhnsf2sjysjgdrkdnt6q8dergstgq7xd7sxl68llacqax3d43
+EVENT: initiated sending 50000 msats to 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e with preimage b1da07f8120a3cf1639e5a3ebb2c3e7bc76728d12f877b88be8467fd6d6466d7
+> PAYMENT SUCCESS
+  PASS C4-2: Lightning payment succeeded
+--- Cycle 4: Poll swap status (120s max) ---
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Swap COMPLETED!
+Cardano TX hash: 6a72c7313d59dcb6b842aa8eff2a4d87d5515ac75013653dce1c7f35cbb83566
+  PASS C4-3: swap status = Completed
+Pool after swap: 49800000 cBTC
+  PASS C4-4: pool decreased by 50000 cBTC (== 50000)
+--- Cycle 4: Close channel ---
+closechannel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+EVENT: initiating channel close
+> Channel close initiated
+Mining blocks for close confirmation...
+Mined 6 blocks
+Mined 6 blocks
+
+EVENT: Channel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 with counterparty 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 closed due to: LocallyInitiatedCooperativeClosure
+> listchannels
+[]
+> Channel list empty (closed)
+Mined 6 blocks
+  PASS C4-5: channel closed (list empty)
+
+  Cycle 4 complete: channel=698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 hash=69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e status=Completed pool=49800000
+
+####################################################
+  CYCLE 5 / 5
+####################################################
+
+--- Cycle 5: Connect peers ---
+connectpeer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735
+SUCCESS: connected to peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> Peer connected
+--- Cycle 5: Open channel (500000 sats) ---
+openchannel 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0@127.0.0.1:9735 500000
+EVENT: initiated channel with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0. 
+Channel initiated
+> --- Cycle 5: Wait for channel ready ---
+Mined 6 blocks
+Waiting for nodes to sync...
+
+EVENT: Channel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is pending awaiting funding lock-in!
+> listchannels
+[
+	{
+		channel_id: c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114,
+		funding_txid: 1431815fe2536dabd35a7f30ac5f279b53e34bf3f82f763bbe9415c7dece18c9,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 1/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114,
+		funding_txid: 1431815fe2536dabd35a7f30ac5f279b53e34bf3f82f763bbe9415c7dece18c9,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 593736279064576,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 2/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114,
+		funding_txid: 1431815fe2536dabd35a7f30ac5f279b53e34bf3f82f763bbe9415c7dece18c9,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 593736279064576,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 3/15), mining...
+Mined 2 blocks
+
+EVENT: Channel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 with peer 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 is ready to be used!
+> listchannels
+[
+	{
+		channel_id: c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114,
+		funding_txid: 1431815fe2536dabd35a7f30ac5f279b53e34bf3f82f763bbe9415c7dece18c9,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 593736279064576,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel is ready (attempt 4)
+listchannels
+[
+	{
+		channel_id: c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114,
+		funding_txid: 1431815fe2536dabd35a7f30ac5f279b53e34bf3f82f763bbe9415c7dece18c9,
+		peer_pubkey: 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0,
+		short_channel_id: 593736279064576,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID: c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114
+  PASS C5-1: channel became ready
+Pool before swap: 49800000 cBTC
+--- Cycle 5: Request swap (50000 cBTC) ---
+Response: {"invoice_id":5,"bolt11":"lnbcrt500n1p56qmavdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp50utnrvuhmwz6kg5c54g4cpwsn86rkk0dfp5t2hwwq9p948t49amssp5zyc0emj8fq4yrm5cnxhuv57lufz7vq63p7vjxafrzenmxctj3t2s9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqqv7qqq5qqqqlgqqqqqqqqfq5gvrfkd4ut2lhww22mnam82mtsxakplvlu48vcrldn0dsvzvu7j973phf27gj934w0ca9p43dhw3wfqjlyhv4yq7upkp0fcsy7n2fhqp8gsgm6","payment_hash":"7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77"}
+Payment hash: 7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77
+BOLT11: lnbcrt500n1p56qmavdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva...
+--- Cycle 5: Pay invoice ---
+sendpayment lnbcrt500n1p56qmavdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weax5a3cxuukuefhva6kxvnd0fjx6mrgxpuhj63sv3axwmtewfsk673sx3a857thdfa8qemnx4ehy7r889ex2np4qfu8yhp9g4nqspyjn93jsjn5jgy6tvllh8jafrr7kvfj5909ltllqpp50utnrvuhmwz6kg5c54g4cpwsn86rkk0dfp5t2hwwq9p948t49amssp5zyc0emj8fq4yrm5cnxhuv57lufz7vq63p7vjxafrzenmxctj3t2s9qyysgqcqzp2xqrrssrzjqflvw7fhcuq0ymvffzcfwjavpsm6hcw5vvp94m46k4av8f4hzyva6qqqqyqqv7qqq5qqqqlgqqqqqqqqfq5gvrfkd4ut2lhww22mnam82mtsxakplvlu48vcrldn0dsvzvu7j973phf27gj934w0ca9p43dhw3wfqjlyhv4yq7upkp0fcsy7n2fhqp8gsgm6
+EVENT: initiated sending 50000 msats to 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77 with preimage 7c141b749853e05750fbded3a06223b7c29d6ec6d4a3e0d697d3a40cb1f093b4
+> PAYMENT SUCCESS
+  PASS C5-2: Lightning payment succeeded
+--- Cycle 5: Poll swap status (120s max) ---
+  Poll 0: status = Completed
+Swap COMPLETED!
+Cardano TX hash: cd864d5323352adbdf29561629cbefed162a03a2427f23e7cb52571dc4fcf512
+  PASS C5-3: swap status = Completed
+Pool after swap: 49750000 cBTC
+  PASS C5-4: pool decreased by 50000 cBTC (== 50000)
+--- Cycle 5: Close channel ---
+closechannel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0
+EVENT: initiating channel close
+> Channel close initiated
+Mining blocks for close confirmation...
+Mined 6 blocks
+Mined 6 blocks
+
+EVENT: Channel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 with counterparty 0278725c2545660804929963284a749209a5b3ffb9e5d48c7eb3132a15e5fafff0 closed due to: LocallyInitiatedCooperativeClosure
+> listchannels
+[]
+> Channel list empty (closed)
+Mined 6 blocks
+  PASS C5-5: channel closed (list empty)
+
+  Cycle 5 complete: channel=c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 hash=7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77 status=Completed pool=49750000
+
+==========================================
+  Section 8: End-to-End Assertions
+==========================================
+
+PASS E2E-1: all 5 channel IDs non-empty
+PASS E2E-2: all 5 payment hashes non-empty
+PASS E2E-3: all 5 swaps completed
+PASS E2E-4: total pool decrease = 250000 cBTC (== 5 x 50000)
+PASS E2E-5: all 5 channel IDs are unique
+
+=== Section 9: Writing evidence JSON ===
+
+
+Evidence written to: /home/ilja/pc-work/cardano-lightning-docs/flows_e2e_runs/ms2_channel_evidence.json
+
+==========================================
+         MS2 CHANNEL LIFECYCLE SUMMARY
+==========================================
+
+Lifecycles:
+  C1: channel=aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 hash=75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286 status=Completed pool=49950000
+  C2: channel=1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b hash=83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd status=Completed pool=49900000
+  C3: channel=ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 hash=6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a status=Completed pool=49850000
+  C4: channel=698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 hash=69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e status=Completed pool=49800000
+  C5: channel=c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 hash=7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77 status=Completed pool=49750000
+
+Initial pool:   50000000 cBTC
+Final pool:     49750000 cBTC
+Total decrease: 250000 cBTC (expected: 250000)
+
+STATUS: ALL 30/30 CHECKS PASSED
+
+Evidence file: /home/ilja/pc-work/cardano-lightning-docs/flows_e2e_runs/ms2_channel_evidence.json
+==========================================
+
+Shutting down...
+quit
+
+EVENT: Accepted inbound channel (d39c03677ecda491e32c1a679bd0d75b7cbdc453c0c3b6a2985c3bc5a5e80f76) from 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd> 
+EVENT: Channel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is pending awaiting funding lock-in!
+> 
+EVENT: Channel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is ready to be used!
+> Created LM invoice #1 on Cardano (tx: 5ae6eadd6333607252dccd56201d3e1265bb3cfd81ab0e59201e738eddac7bd4)
+
+EVENT: received payment from payment hash 75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286 of 50000 millisatoshis
+> LM invoice #1: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap 75d86c0430e0c979e8335a407087b6a5fee9d93bd5a8d37ee4fbcf737aab9286 fulfilled, cBTC sent to addr_test1vzjv879ne7guc2mzdmlh0yyj0dzgmyramz04zzywjzpgs5srxg9re, tx: 4514fd792bc37ba45bc59129ec8f67ee5e531cfe3ce40799a9b67a97a8e1bd54
+
+EVENT: Channel aed4a4b807a0c9b519ee4e966d32242f4da57a296aaf6e048edd186a6a065054 with counterparty 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd closed due to: CounterpartyInitiatedCooperativeClosure
+> 
+EVENT: Accepted inbound channel (6298e32ae7dda92dfdb4dceca4169135e2364080b1272928183ee40b2fe54eb1) from 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd> 
+EVENT: Channel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is pending awaiting funding lock-in!
+> 
+EVENT: Channel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is ready to be used!
+> Created LM invoice #2 on Cardano (tx: 3714a12101cab3f3e517781b90436265bca4683f4473e166c7f53fd82cf1b778)
+
+EVENT: received payment from payment hash 83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd of 50000 millisatoshis
+> LM invoice #2: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap 83584867b7b44d2948d8ced16c65db338fbc771b9da3047aee9e316df47badbd fulfilled, cBTC sent to addr_test1vzjv879ne7guc2mzdmlh0yyj0dzgmyramz04zzywjzpgs5srxg9re, tx: 10e2452f3ed31b4171b612405111eefd6b3211db13c9e0f2e97ce5ea8cc2bfce
+
+EVENT: Channel 1eaedceaf784c8eab3e7daa8c461f8bd6098baf6432a94dd710c07b11e66195b with counterparty 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd closed due to: CounterpartyInitiatedCooperativeClosure
+> 
+EVENT: Accepted inbound channel (d65fff1124a70575217762f6173fad17138518e5359c8d0b2fb5d66febd2f9f6) from 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd> 
+EVENT: Channel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is pending awaiting funding lock-in!
+> 
+EVENT: Channel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is ready to be used!
+> Created LM invoice #3 on Cardano (tx: 62aec4b5b9940d50088cce7b8a2a99c74503cb9b1cf239c5ed64186f1ea09dd0)
+
+EVENT: received payment from payment hash 6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a of 50000 millisatoshis
+> LM invoice #3: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap 6828fca62201b54bc013a176e940e503fac0fed6e3ce371e5bcfa295889c9f2a fulfilled, cBTC sent to addr_test1vzjv879ne7guc2mzdmlh0yyj0dzgmyramz04zzywjzpgs5srxg9re, tx: 2219a48e374cc0c835233ab4a2e231cb7ccf631e1a857afc896cbc5a1b707e62
+
+EVENT: Channel ff5ee7ee8f1e7d7ab9625356e7670777843761e5a173c3267c77feaecbf09ae3 with counterparty 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd closed due to: CounterpartyInitiatedCooperativeClosure
+> 
+EVENT: Accepted inbound channel (6ada1693927fa1273a1f243ef8fec9aea7f9c5d6161e547bb54a1a47c0eb6685) from 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd> 
+EVENT: Channel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is pending awaiting funding lock-in!
+> 
+EVENT: Channel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is ready to be used!
+> Created LM invoice #4 on Cardano (tx: a20a12bc10ae4867ddf5c872d0d7bda60e9f70cf3fd6cb61a2f6163c3664ded1)
+
+EVENT: received payment from payment hash 69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e of 50000 millisatoshis
+> LM invoice #4: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap 69a13c3e7f8e2d858f4b7dd00f7fcf2b0aed2a3f0fc5b09909ef1c7af7223f8e fulfilled, cBTC sent to addr_test1vzjv879ne7guc2mzdmlh0yyj0dzgmyramz04zzywjzpgs5srxg9re, tx: 6a72c7313d59dcb6b842aa8eff2a4d87d5515ac75013653dce1c7f35cbb83566
+
+EVENT: Channel 698e9062198155e97487e80b9508c44ba37c6bcef1ec4f0c34fcb8cbcf4fab48 with counterparty 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd closed due to: CounterpartyInitiatedCooperativeClosure
+> 
+EVENT: Accepted inbound channel (c31df3bfb06930dfd4093b68b4a0a44c2d8326388a468fec8f381d753906b833) from 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd> 
+EVENT: Channel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is pending awaiting funding lock-in!
+> 
+EVENT: Channel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 with peer 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd is ready to be used!
+> Created LM invoice #5 on Cardano (tx: f3208457f77f9477a066cb5802441f4e2d66b48251875948d593094e17c485cb)
+
+EVENT: received payment from payment hash 7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77 of 50000 millisatoshis
+> SUCCESS: swap 7f1731b397db85ab2298a5515c05d099f43b59ed4868b55dce01425a9d752f77 fulfilled, cBTC sent to addr_test1vzjv879ne7guc2mzdmlh0yyj0dzgmyramz04zzywjzpgs5srxg9re, tx: cd864d5323352adbdf29561629cbefed162a03a2427f23e7cb52571dc4fcf512
+
+EVENT: Channel c918cedec71594be3b762ff8f34be3539b275fac307f5ad3ab6d53e25f813114 with counterparty 027ec77937c700f26d8948b0974bac0c37abe1d463025aeebab57ac3a6b71119dd closed due to: CounterpartyInitiatedCooperativeClosure
+> quit
+Done.
