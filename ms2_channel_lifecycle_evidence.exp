@@ -1,0 +1,803 @@
+#!/usr/bin/expect -f
+#
+# MS2 Evidence: 5 Channel Lifecycles with Onramp Swaps (Devnet)
+#
+# Opens a channel, performs an onramp swap, and closes the channel — repeated
+# 5 times in a single run. Both nodes stay running throughout (no restart).
+#
+# Per-cycle flow:
+#   1. Connect peers (handles "already connected")
+#   2. Open channel (500,000 sats)
+#   3. Mine + poll until channel ready
+#   4. Request onramp swap (50,000 cBTC)
+#   5. Pay BOLT11 invoice from payer node
+#   6. Poll swap status until Completed
+#   7. Close channel (cooperative)
+#   8. Mine blocks until channel list empty
+#
+# Assertions: 30 total (5 per cycle × 5 cycles + 5 end-to-end)
+#
+# Prerequisites (run BEFORE this script):
+#   1. yaci-devkit running + contract deployed:
+#        cd ~/pc-work/lightning-liquidity-manager && \
+#          bash ../cardano-lightning-docs/flows_e2e_runs/test_local_devnet.sh --clean
+#   2. bitcoind running with testwallet funded (101+ blocks)
+#   3. Both binaries pre-built (release):
+#        ~/pc-work/ldk-sample/target/release/ldk-sample
+#        ~/pc-work/cardano-lightning-relay/target/release/cardano-lightning-relay
+#
+# Usage:
+#   expect ms2_channel_lifecycle_evidence.exp
+#
+# Output:
+#   ~/pc-work/cardano-lightning-docs/flows_e2e_runs/ms2_channel_evidence.json
+#
+
+set timeout 180
+
+# =============================================================================
+# Configuration
+# =============================================================================
+set swap_amount_cbtc 50000
+set channel_size_sats 500000
+set num_cycles 5
+
+# Paths
+set home $env(HOME)
+set lm_dir "$home/pc-work/lightning-liquidity-manager"
+set relay_dir "$home/pc-work/cardano-lightning-relay"
+set ldk_dir "$home/pc-work/ldk-sample"
+set deployment_json "$lm_dir/credentials/deployment.json"
+set plutus_json "$lm_dir/plutus-applied.json"
+set script_cbor_file "/tmp/cardano_script_cbor.hex"
+set evidence_file "$home/pc-work/cardano-lightning-docs/flows_e2e_runs/ms2_channel_evidence.json"
+
+# bitcoind RPC credentials
+set btc_rpc_auth "ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E="
+
+puts "=========================================="
+puts "  MS2 Evidence: 5 Channel Lifecycles"
+puts "=========================================="
+puts ""
+puts "Swap amount:   $swap_amount_cbtc cBTC per cycle"
+puts "Channel size:  $channel_size_sats sats per cycle"
+puts "Cycles:        $num_cycles"
+puts ""
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+proc btc {args} {
+    set result [exec /home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= -rpcwallet=testwallet {*}$args]
+    return $result
+}
+
+proc mine_blocks {count} {
+    set addr [btc getnewaddress]
+    btc generatetoaddress $count $addr
+    puts "Mined $count blocks"
+}
+
+proc json_field {json field} {
+    set result [exec python3 -c "import json,sys; print(json.loads(sys.argv\[1\])\['$field'\])" $json]
+    return $result
+}
+
+proc json_nested {json args} {
+    set keys ""
+    foreach k $args {
+        append keys "\['$k'\]"
+    }
+    set result [exec python3 -c "import json,sys; d=json.loads(sys.argv\[1\]); print(d$keys)" $json]
+    return $result
+}
+
+proc api_get {path} {
+    set result [exec curl -sf "http://localhost:3000$path"]
+    return $result
+}
+
+proc api_post {path body} {
+    set result [exec curl -sf -X POST "http://localhost:3000$path" -H "Content-Type: application/json" -d $body]
+    return $result
+}
+
+proc cleanup {ldk_id relay_id script_cbor_file} {
+    puts "\nShutting down..."
+    catch {send -i $ldk_id "quit\r"}
+    catch {send -i $relay_id "quit\r"}
+    catch {expect -i $ldk_id eof}
+    catch {expect -i $relay_id eof}
+    catch {file delete $script_cbor_file}
+}
+
+# =============================================================================
+# Section 0: Validate prerequisites
+# =============================================================================
+puts "\n=== Section 0: Validating prerequisites ===\n"
+
+if {[catch {exec /home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= getblockchaininfo}]} {
+    puts "ERROR: bitcoind not running."
+    exit 1
+}
+puts "bitcoind: OK"
+
+if {[catch {btc getwalletinfo}]} {
+    puts "ERROR: testwallet not loaded."
+    exit 1
+}
+puts "testwallet: OK"
+
+if {[catch {exec curl -sf http://localhost:8080/api/v1/blocks/latest}]} {
+    puts "ERROR: yaci-devkit not running. Run: bash test_local_devnet.sh --clean"
+    exit 1
+}
+puts "yaci-devkit API: OK"
+
+if {![file exists $deployment_json]} {
+    puts "ERROR: $deployment_json not found."
+    exit 1
+}
+puts "deployment.json: OK"
+
+if {![file exists $plutus_json]} {
+    puts "ERROR: $plutus_json not found."
+    exit 1
+}
+puts "plutus-applied.json: OK"
+
+if {![file exists $ldk_dir/target/release/ldk-sample]} {
+    puts "ERROR: ldk-sample release binary not found."
+    exit 1
+}
+if {![file exists $relay_dir/target/release/cardano-lightning-relay]} {
+    puts "ERROR: relay release binary not found."
+    exit 1
+}
+puts "Binaries: OK"
+
+# =============================================================================
+# Section 1: Extract config from deployment.json
+# =============================================================================
+puts "\n=== Section 1: Extract config ===\n"
+
+set deploy_data [exec cat $deployment_json]
+set operator_addr [json_nested $deploy_data operator address]
+set operator_pkh  [json_nested $deploy_data operator pkh]
+set skey_path     [json_nested $deploy_data operator sk_file]
+set script_addr   [json_nested $deploy_data validator parameterized_script_address]
+set cbtc_policy   [json_nested $deploy_data token cbtc_policy]
+set cbtc_name     [json_nested $deploy_data token cbtc_asset_name]
+
+puts "Operator address:  $operator_addr"
+puts "Script address:    $script_addr"
+puts "cBTC policy:       $cbtc_policy"
+puts "cBTC asset name:   $cbtc_name"
+
+# =============================================================================
+# Section 2: Extract script CBOR from plutus-applied.json
+# =============================================================================
+puts "\n=== Section 2: Extract script CBOR ===\n"
+
+set compiled_code [exec python3 -c "
+import json
+with open('$plutus_json') as f:
+    d = json.load(f)
+print(d\['validators'\]\[0\]\['compiledCode'\])
+"]
+
+set cbor_fd [open $script_cbor_file w]
+puts -nonewline $cbor_fd $compiled_code
+close $cbor_fd
+
+puts "Script CBOR -> $script_cbor_file ([string length $compiled_code] hex chars)"
+
+# =============================================================================
+# Section 3: Create ADA-only collateral UTxOs
+# =============================================================================
+puts "\n=== Section 3: Create ADA-only collateral UTxOs ===\n"
+
+# Each onramp = 2 Plutus TXs (create_invoice + fulfill_invoice).
+# 5 cycles × 2 = 10, plus 4 spare = 14.
+set num_collateral 14
+
+puts "Creating $num_collateral ADA-only UTxOs (10 ADA each) for collateral..."
+exec python3 -c "
+from pycardano import *
+import json
+
+with open('$skey_path') as f:
+    sk_data = json.load(f)
+raw_key_hex = sk_data\['cborHex'\]\[4:\]
+sk = PaymentSigningKey.from_primitive(bytes.fromhex(raw_key_hex))
+ctx = OgmiosChainContext(host='localhost', port=1337, network=Network.TESTNET)
+addr = Address.from_primitive('$operator_addr')
+builder = TransactionBuilder(ctx)
+builder.add_input_address(addr)
+for i in range($num_collateral):
+    builder.add_output(TransactionOutput(addr, Value(coin=10_000_000)))
+signed_tx = builder.build_and_sign(\[sk\], change_address=addr)
+ctx.submit_tx(signed_tx)
+print(f'Created $num_collateral x 10 ADA collateral UTxOs: {signed_tx.id}')
+"
+sleep 3
+puts "$num_collateral collateral UTxOs created"
+
+# =============================================================================
+# Section 4: Clean LDK data + start payer node (port 9736)
+# =============================================================================
+puts "\n=== Section 4: Clean LDK data + start payer node ===\n"
+
+catch {exec rm -rf $ldk_dir/ldk_data_standard}
+catch {exec rm -rf $relay_dir/ldk_data_cardano}
+puts "Cleaned old LDK data directories"
+
+spawn $ldk_dir/target/release/ldk-sample "$btc_rpc_auth@127.0.0.1:18443" $ldk_dir/ldk_data_standard 9736 regtest
+
+set ldk_id $spawn_id
+
+expect {
+    -i $ldk_id -re "Local Node ID is (\[a-f0-9\]+)" {
+        set ldk_node_id $expect_out(1,string)
+        puts "Payer node ID: $ldk_node_id"
+    }
+    timeout {
+        puts "ERROR: Timeout starting ldk-sample"
+        exit 1
+    }
+}
+
+expect -i $ldk_id ">"
+puts "Payer node ready"
+
+# =============================================================================
+# Section 5: Start relay (port 9735)
+# =============================================================================
+puts "\n=== Section 5: Start relay ===\n"
+
+set env(CARDANO_ENABLED) "1"
+set env(CARDANO_BLOCKFROST_URL) "http://localhost:8080/api/v1/"
+set env(CARDANO_BLOCKFROST_KEY) "local"
+set env(CARDANO_SKEY_PATH) $skey_path
+set env(CARDANO_SCRIPT_ADDRESS) $script_addr
+set env(CARDANO_SCRIPT_CBOR_PATH) $script_cbor_file
+set env(CARDANO_CBTC_POLICY_ID) $cbtc_policy
+set env(CARDANO_CBTC_ASSET_NAME) $cbtc_name
+set env(CARDANO_OPERATOR_ADDRESS) $operator_addr
+set env(CARDANO_OPERATOR_PKH) $operator_pkh
+set env(CARDANO_API_PORT) "3000"
+
+spawn $relay_dir/target/release/cardano-lightning-relay "$btc_rpc_auth@127.0.0.1:18443" $relay_dir/ldk_data_cardano 9735 regtest
+
+set relay_id $spawn_id
+
+expect {
+    -i $relay_id -re "Local Node ID is (\[a-f0-9\]+)" {
+        set relay_node_id $expect_out(1,string)
+        puts "Relay node ID: $relay_node_id"
+    }
+    timeout {
+        puts "ERROR: Timeout starting relay"
+        exit 1
+    }
+}
+
+expect -i $relay_id ">"
+puts "Relay ready (API on port 3000)"
+
+foreach var {CARDANO_ENABLED CARDANO_BLOCKFROST_URL CARDANO_BLOCKFROST_KEY
+             CARDANO_SKEY_PATH CARDANO_SCRIPT_ADDRESS CARDANO_SCRIPT_CBOR_PATH
+             CARDANO_CBTC_POLICY_ID CARDANO_CBTC_ASSET_NAME
+             CARDANO_OPERATOR_ADDRESS CARDANO_OPERATOR_PKH CARDANO_API_PORT} {
+    catch {unset env($var)}
+}
+
+sleep 2
+
+# =============================================================================
+# Section 6: Snapshot initial pool state
+# =============================================================================
+puts "\n=== Section 6: Initial pool state ===\n"
+
+if {[catch {set pool_initial_resp [api_get "/pool/info"]} err]} {
+    puts "ERROR: Failed to query initial pool info: $err"
+    cleanup $ldk_id $relay_id $script_cbor_file
+    exit 1
+}
+
+set initial_pool [json_field $pool_initial_resp "total_liquidity"]
+puts "Initial pool liquidity: $initial_pool cBTC"
+
+# Evidence accumulators
+set cycle_evidence {}
+
+# Assertion counters
+set test_passed 1
+set checks_passed 0
+set checks_total 0
+
+# Track channel IDs and payment hashes for end-to-end checks
+set all_channel_ids {}
+set all_payment_hashes {}
+
+# =============================================================================
+# Section 7: 5 Channel Lifecycle Loops
+# =============================================================================
+puts "\n=========================================="
+puts "  Section 7: 5 Channel Lifecycles"
+puts "=========================================="
+
+for {set cycle 1} {$cycle <= $num_cycles} {incr cycle} {
+    puts "\n####################################################"
+    puts "  CYCLE $cycle / $num_cycles"
+    puts "####################################################\n"
+
+    # -----------------------------------------------------------------
+    # 7a: Connect peers
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Connect peers ---"
+    send -i $ldk_id "connectpeer ${relay_node_id}@127.0.0.1:9735\r"
+    expect {
+        -i $ldk_id "SUCCESS" {
+            puts "Peer connected"
+        }
+        -i $ldk_id "already connected" {
+            puts "Peer already connected"
+        }
+        -i $ldk_id "ERROR" {
+            puts "ERROR: Connect failed in cycle $cycle"
+            cleanup $ldk_id $relay_id $script_cbor_file
+            exit 1
+        }
+        timeout {
+            puts "ERROR: Connect timeout in cycle $cycle"
+            cleanup $ldk_id $relay_id $script_cbor_file
+            exit 1
+        }
+    }
+    expect -i $ldk_id ">"
+    sleep 2
+
+    # -----------------------------------------------------------------
+    # 7b: Open channel
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Open channel ($channel_size_sats sats) ---"
+    send -i $ldk_id "openchannel ${relay_node_id}@127.0.0.1:9735 $channel_size_sats\r"
+    expect {
+        -i $ldk_id "EVENT: initiated channel" {
+            puts "Channel initiated"
+        }
+        -i $ldk_id "ERROR" {
+            puts "ERROR: Channel open failed in cycle $cycle"
+            cleanup $ldk_id $relay_id $script_cbor_file
+            exit 1
+        }
+        timeout {
+            puts "ERROR: Channel open timeout in cycle $cycle"
+            cleanup $ldk_id $relay_id $script_cbor_file
+            exit 1
+        }
+    }
+    expect -i $ldk_id ">"
+
+    # -----------------------------------------------------------------
+    # 7c: Mine + poll until channel ready
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Wait for channel ready ---"
+    mine_blocks 6
+    puts "Waiting for nodes to sync..."
+    sleep 10
+
+    set channel_ready 0
+    for {set i 0} {$i < 15} {incr i} {
+        send -i $ldk_id "listchannels\r"
+        expect {
+            -i $ldk_id "is_channel_ready: true" {
+                set channel_ready 1
+                puts "Channel is ready (attempt [expr $i + 1])"
+            }
+            -i $ldk_id "is_channel_ready: false" {
+                puts "Channel not ready (attempt [expr $i + 1]/15), mining..."
+                mine_blocks 2
+                sleep 5
+            }
+        }
+        expect -i $ldk_id ">"
+        if {$channel_ready} break
+    }
+
+    if {!$channel_ready} {
+        puts "ERROR: Channel never became ready in cycle $cycle"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+    sleep 3
+
+    # Extract channel_id
+    send -i $ldk_id "listchannels\r"
+    expect {
+        -i $ldk_id -re "channel_id: (\[a-f0-9\]+)" {
+            set cycle_channel_id $expect_out(1,string)
+        }
+    }
+    expect -i $ldk_id ">"
+    puts "Channel ID: $cycle_channel_id"
+
+    # --- PER-CYCLE ASSERTION 1: Channel became ready ---
+    incr checks_total
+    puts "  PASS C$cycle-1: channel became ready"
+    incr checks_passed
+
+    # -----------------------------------------------------------------
+    # 7d: Query pool state before swap
+    # -----------------------------------------------------------------
+    set pool_before_resp [api_get "/pool/info"]
+    set pool_before_swap [json_field $pool_before_resp "total_liquidity"]
+    puts "Pool before swap: $pool_before_swap cBTC"
+
+    # -----------------------------------------------------------------
+    # 7e: Request onramp swap
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Request swap ($swap_amount_cbtc cBTC) ---"
+    set swap_body "\{\"amount_cbtc\": $swap_amount_cbtc, \"cardano_address\": \"$operator_addr\"\}"
+
+    if {[catch {set swap_resp [api_post "/swap/request" $swap_body]} err]} {
+        puts "ERROR: Swap request failed in cycle $cycle: $err"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    puts "Response: $swap_resp"
+
+    if {![catch {set api_error [json_field $swap_resp "error"]}]} {
+        puts "ERROR: API error in cycle $cycle: $api_error"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    set bolt11       [json_field $swap_resp "bolt11"]
+    set payment_hash [json_field $swap_resp "payment_hash"]
+    puts "Payment hash: $payment_hash"
+    puts "BOLT11: [string range $bolt11 0 70]..."
+
+    # -----------------------------------------------------------------
+    # 7f: Pay invoice from payer
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Pay invoice ---"
+    send -i $ldk_id "sendpayment $bolt11\r"
+
+    set payment_success 0
+    expect {
+        -i $ldk_id "successfully sent payment" {
+            set payment_success 1
+            puts "PAYMENT SUCCESS"
+        }
+        -i $ldk_id "EVENT: initiated sending" {
+            expect {
+                -i $ldk_id "successfully sent payment" {
+                    set payment_success 1
+                    puts "PAYMENT SUCCESS"
+                }
+                -i $ldk_id "failed" {
+                    puts "Payment failed after initiation"
+                }
+                timeout {
+                    puts "Payment timeout after initiation"
+                }
+            }
+        }
+        -i $ldk_id "ERROR" {
+            puts "Payment error in cycle $cycle"
+        }
+        -i $ldk_id "RouteNotFound" {
+            puts "ERROR: No route found in cycle $cycle"
+        }
+        timeout {
+            puts "Payment initiation timeout in cycle $cycle"
+        }
+    }
+    expect -i $ldk_id ">"
+
+    # --- PER-CYCLE ASSERTION 2: Lightning payment succeeded ---
+    incr checks_total
+    if {$payment_success} {
+        puts "  PASS C$cycle-2: Lightning payment succeeded"
+        incr checks_passed
+    } else {
+        puts "  FAIL C$cycle-2: Lightning payment failed"
+        set test_passed 0
+    }
+
+    # -----------------------------------------------------------------
+    # 7g: Poll swap status until Completed (120s max)
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Poll swap status (120s max) ---"
+    set swap_completed 0
+    set swap_status "unknown"
+    for {set i 0} {$i < 24} {incr i} {
+        after 5000
+        if {[catch {set status_resp [api_get "/swap/status/$payment_hash"]} err]} {
+            puts "  Poll $i: error: $err"
+            continue
+        }
+        set swap_status [json_field $status_resp "status"]
+        puts "  Poll $i: status = $swap_status"
+
+        if {[string match "*Completed*" $swap_status]} {
+            set swap_completed 1
+            puts "Swap COMPLETED!"
+
+            if {![catch {set cardano_tx [json_field $status_resp "cardano_tx_hash"]}]} {
+                if {$cardano_tx ne "null" && $cardano_tx ne ""} {
+                    puts "Cardano TX hash: $cardano_tx"
+                }
+            }
+            break
+        }
+    }
+
+    # --- PER-CYCLE ASSERTION 3: Swap status reached Completed ---
+    incr checks_total
+    if {$swap_completed} {
+        puts "  PASS C$cycle-3: swap status = Completed"
+        incr checks_passed
+    } else {
+        puts "  FAIL C$cycle-3: swap status = $swap_status (expected Completed)"
+        set test_passed 0
+    }
+
+    # -----------------------------------------------------------------
+    # 7h: Query pool state after swap
+    # -----------------------------------------------------------------
+    set pool_after_resp [api_get "/pool/info"]
+    set pool_after_swap [json_field $pool_after_resp "total_liquidity"]
+    puts "Pool after swap: $pool_after_swap cBTC"
+
+    set pool_diff [expr {$pool_before_swap - $pool_after_swap}]
+
+    # --- PER-CYCLE ASSERTION 4: Pool decreased by swap amount ---
+    incr checks_total
+    if {$pool_diff == $swap_amount_cbtc} {
+        puts "  PASS C$cycle-4: pool decreased by $pool_diff cBTC (== $swap_amount_cbtc)"
+        incr checks_passed
+    } else {
+        puts "  FAIL C$cycle-4: pool decreased by $pool_diff cBTC (expected $swap_amount_cbtc)"
+        set test_passed 0
+    }
+
+    # -----------------------------------------------------------------
+    # 7i: Close channel
+    # -----------------------------------------------------------------
+    puts "--- Cycle $cycle: Close channel ---"
+    send -i $ldk_id "closechannel $cycle_channel_id $relay_node_id\r"
+    expect {
+        -i $ldk_id "EVENT: initiating channel close" {
+            puts "Channel close initiated"
+        }
+        -i $ldk_id "ERROR" {
+            puts "WARNING: Channel close error in cycle $cycle, continuing..."
+        }
+        timeout {
+            puts "WARNING: Channel close timeout in cycle $cycle, continuing..."
+        }
+    }
+    expect -i $ldk_id ">"
+
+    # Mine blocks for close confirmation + sweep
+    puts "Mining blocks for close confirmation..."
+    mine_blocks 6
+    sleep 10
+    mine_blocks 6
+    sleep 5
+
+    # Poll until channel list empty (confirms close)
+    set close_ok 0
+    set close_start [clock seconds]
+    while {[expr {[clock seconds] - $close_start}] < 60} {
+        send -i $ldk_id "listchannels\r"
+        expect {
+            -i $ldk_id -re "\\\[\\s*\\\]" {
+                set close_ok 1
+                puts "Channel list empty (closed)"
+                expect -i $ldk_id ">"
+                break
+            }
+            -i $ldk_id "channel_id:" {
+                puts "Channel still listed, mining more..."
+                mine_blocks 2
+                sleep 3
+            }
+            timeout {
+                puts "Timeout waiting for channel list in cycle $cycle"
+                break
+            }
+        }
+        expect -i $ldk_id ">"
+    }
+
+    # Mine more blocks to ensure sweep TXs confirm (funds available for next cycle)
+    mine_blocks 6
+    sleep 5
+
+    # --- PER-CYCLE ASSERTION 5: Channel closed successfully ---
+    incr checks_total
+    if {$close_ok} {
+        puts "  PASS C$cycle-5: channel closed (list empty)"
+        incr checks_passed
+    } else {
+        puts "  FAIL C$cycle-5: channel did not close within timeout"
+        set test_passed 0
+    }
+
+    # Record evidence for this cycle
+    lappend cycle_evidence [list $cycle $cycle_channel_id $payment_hash $swap_status $pool_after_swap]
+    lappend all_channel_ids $cycle_channel_id
+    lappend all_payment_hashes $payment_hash
+
+    puts "\n  Cycle $cycle complete: channel=$cycle_channel_id hash=$payment_hash status=$swap_status pool=$pool_after_swap"
+}
+
+# =============================================================================
+# Section 8: End-to-end assertions
+# =============================================================================
+puts "\n=========================================="
+puts "  Section 8: End-to-End Assertions"
+puts "=========================================="
+puts ""
+
+# E2E Check 1: All 5 channel IDs non-empty
+incr checks_total
+set all_ids_ok 1
+foreach cid $all_channel_ids {
+    if {$cid eq "" || [string length $cid] < 10} {
+        set all_ids_ok 0
+    }
+}
+if {$all_ids_ok} {
+    puts "PASS E2E-1: all $num_cycles channel IDs non-empty"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-1: some channel IDs missing"
+    set test_passed 0
+}
+
+# E2E Check 2: All 5 payment hashes non-empty
+incr checks_total
+set all_hashes_ok 1
+foreach ph $all_payment_hashes {
+    if {$ph eq "" || [string length $ph] < 10} {
+        set all_hashes_ok 0
+    }
+}
+if {$all_hashes_ok} {
+    puts "PASS E2E-2: all $num_cycles payment hashes non-empty"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-2: some payment hashes missing"
+    set test_passed 0
+}
+
+# E2E Check 3: All 5 swaps completed
+incr checks_total
+set completed_swaps 0
+foreach ev $cycle_evidence {
+    if {[string match "*Completed*" [lindex $ev 3]]} {
+        incr completed_swaps
+    }
+}
+if {$completed_swaps == $num_cycles} {
+    puts "PASS E2E-3: all $num_cycles swaps completed"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-3: only $completed_swaps/$num_cycles swaps completed"
+    set test_passed 0
+}
+
+# E2E Check 4: Total pool decrease = 5 × swap_amount
+incr checks_total
+set final_pool [lindex [lindex $cycle_evidence end] 4]
+set total_decrease [expr {$initial_pool - $final_pool}]
+set expected_decrease [expr {$num_cycles * $swap_amount_cbtc}]
+if {$total_decrease == $expected_decrease} {
+    puts "PASS E2E-4: total pool decrease = $total_decrease cBTC (== $num_cycles x $swap_amount_cbtc)"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-4: total pool decrease = $total_decrease cBTC (expected $expected_decrease)"
+    set test_passed 0
+}
+
+# E2E Check 5: All 5 channel IDs unique (distinct channels)
+incr checks_total
+set unique_ids [lsort -unique $all_channel_ids]
+if {[llength $unique_ids] == $num_cycles} {
+    puts "PASS E2E-5: all $num_cycles channel IDs are unique"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-5: only [llength $unique_ids] unique channel IDs out of $num_cycles"
+    set test_passed 0
+}
+
+# =============================================================================
+# Section 9: Write evidence JSON
+# =============================================================================
+puts "\n=== Section 9: Writing evidence JSON ===\n"
+
+# Build lifecycle entries
+set lifecycle_items {}
+foreach ev $cycle_evidence {
+    set c   [lindex $ev 0]
+    set cid [lindex $ev 1]
+    set ph  [lindex $ev 2]
+    set st  [lindex $ev 3]
+    set pa  [lindex $ev 4]
+    lappend lifecycle_items "\{\"cycle\": $c, \"channel_id\": \"$cid\", \"payment_hash\": \"$ph\", \"swap_status\": \"$st\", \"pool_after\": $pa\}"
+}
+set lifecycle_json "\[[join $lifecycle_items ", "]\]"
+
+set timestamp [exec python3 -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())"]
+
+set evidence_json "\{
+  \"network\": \"local-devnet\",
+  \"timestamp\": \"$timestamp\",
+  \"initial_pool_liquidity\": $initial_pool,
+  \"final_pool_liquidity\": $final_pool,
+  \"channel_size_sats\": $channel_size_sats,
+  \"swap_amount_cbtc\": $swap_amount_cbtc,
+  \"lifecycles\": $lifecycle_json,
+  \"total_channels_opened\": $num_cycles,
+  \"total_channels_closed\": $num_cycles,
+  \"total_swaps_completed\": $completed_swaps,
+  \"all_checks_passed\": [expr {$test_passed ? "true" : "false"}]
+\}"
+
+exec python3 -c "
+import json, sys
+data = json.loads(sys.argv\[1\])
+with open('$evidence_file', 'w') as f:
+    json.dump(data, f, indent=2)
+print(json.dumps(data, indent=2))
+" $evidence_json
+
+puts "\nEvidence written to: $evidence_file"
+
+# =============================================================================
+# Section 10: Summary
+# =============================================================================
+puts "\n=========================================="
+puts "         MS2 CHANNEL LIFECYCLE SUMMARY"
+puts "=========================================="
+puts ""
+
+puts "Lifecycles:"
+foreach ev $cycle_evidence {
+    puts "  C[lindex $ev 0]: channel=[lindex $ev 1] hash=[lindex $ev 2] status=[lindex $ev 3] pool=[lindex $ev 4]"
+}
+puts ""
+puts "Initial pool:   $initial_pool cBTC"
+puts "Final pool:     $final_pool cBTC"
+puts "Total decrease: $total_decrease cBTC (expected: $expected_decrease)"
+puts ""
+
+if {$test_passed} {
+    puts "STATUS: ALL $checks_passed/$checks_total CHECKS PASSED"
+} else {
+    puts "STATUS: $checks_passed/$checks_total CHECKS PASSED — SOME FAILED"
+}
+
+puts ""
+puts "Evidence file: $evidence_file"
+puts "=========================================="
+
+# =============================================================================
+# Section 11: Cleanup
+# =============================================================================
+cleanup $ldk_id $relay_id $script_cbor_file
+
+puts "Done."
+
+if {$test_passed} {
+    exit 0
+} else {
+    exit 1
+}

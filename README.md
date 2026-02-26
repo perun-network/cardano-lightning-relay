@@ -1,31 +1,126 @@
-# ldk-sample
-Sample node implementation using LDK.
+# Cardano Lightning Relay
 
-## Installation
+Lightning-to-Cardano bridge relay node. Combines an LDK Lightning node with a Cardano smart contract connector for cross-chain BTC/cBTC swaps.
+
+Built on [LDK](https://lightningdevkit.org/) and the [Liquidity Manager](https://github.com/perun-network/lightning-liquidity-manager) Plutus V3 contract.
+
+## Prerequisites
+
+- **Rust** (edition 2024)
+- **bitcoind** (v25+) running in regtest or testnet mode
+- **Cardano devnet** ([yaci-devkit](https://github.com/bloxbean/yaci-devkit)) or Blockfrost API access for preprod/mainnet
+
+## Quick Start (Local Devnet)
+
+### 1. Start bitcoind (regtest)
+
+```bash
+bitcoind -regtest -rpcuser=user -rpcpassword=pass -daemon
+
+bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass \
+  createwallet testwallet
+
+bitcoin-cli -regtest -rpcuser=user -rpcpassword=pass \
+  -rpcwallet=testwallet -generate 101
 ```
-git clone https://github.com/lightningdevkit/ldk-sample
+
+### 2. Deploy the Cardano contract
+
+```bash
+cd lightning-liquidity-manager
+bash scripts/test_local_devnet.sh --clean
 ```
 
-## Usage
+This starts yaci-devkit, generates operator credentials, mints test cBTC, and deploys the Liquidity Manager contract with 50M cBTC initial pool. See the [lightning-liquidity-manager](https://github.com/perun-network/lightning-liquidity-manager) repo for details.
+
+### 3. Build and run the relay
+
+```bash
+cargo build --release
+
+export CARDANO_ENABLED=true
+export CARDANO_SKEY_PATH=path/to/operator.sk
+export CARDANO_SCRIPT_ADDRESS=addr_test1w...
+export CARDANO_SCRIPT_CBOR_PATH=path/to/script_cbor.hex
+export CARDANO_CBTC_POLICY_ID=<policy_hex>
+export CARDANO_CBTC_ASSET_NAME=63425443
+export CARDANO_OPERATOR_ADDRESS=addr_test1v...
+export CARDANO_OPERATOR_PKH=<pkh_hex>
+# For local devnet (defaults):
+# CARDANO_BLOCKFROST_URL=http://localhost:8080/api/v1/
+# CARDANO_BLOCKFROST_KEY=local
+# CARDANO_API_PORT=3000
+
+./target/release/cardano-lightning-relay \
+  user:pass@127.0.0.1:18443 ./ldk_data 9735 regtest
 ```
-cd ldk-sample
-cargo run <bitcoind-rpc-username>:<bitcoind-rpc-password>@<bitcoind-rpc-host>:<bitcoind-rpc-port> <ldk_storage_directory_path> [<ldk-peer-listening-port>] [<bitcoin-network>] [<announced-node-name>] [<announced-listen-addr>]
+
+All Cardano env vars are populated from `credentials/deployment.json` by the E2E test scripts.
+
+## Preprod
+
+For Cardano Preprod deployment, see the [`feat-deploy-preprod`](https://github.com/perun-network/cardano-lightning-relay/tree/feat-deploy-preprod) branch. The key differences:
+
+- `CARDANO_BLOCKFROST_URL=https://cardano-preprod.blockfrost.io/api/v0`
+- `CARDANO_BLOCKFROST_KEY=<your-blockfrost-project-id>`
+- Uses built-in `Network::Preprod` cost models (fixes PlutusV3 canonical ordering)
+- Fetches protocol params from Blockfrost for correct fee calculation
+
+The [cardano-lightning-client](https://github.com/perun-network/cardano-lightning-client) library (`feat-deploy-preprod` branch) contains the fix.
+
+## REST API
+
+The relay exposes a REST API on port 3000 (configurable via `CARDANO_API_PORT`).
+
+### Pool Management
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/pool/info` | Query pool state (total_liquidity, reserved, available) |
+| `POST` | `/pool/deposit` | Deposit cBTC into pool. Body: `{"amount": <i64>}` |
+| `POST` | `/pool/withdraw` | Withdraw cBTC from pool. Body: `{"amount": <i64>}` |
+
+### Onramp (Lightning BTC -> Cardano cBTC)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/swap/request` | Request swap. Body: `{"amount_cbtc": <i64>, "cardano_address": "<addr>"}` |
+| `GET` | `/swap/status/{hash}` | Query swap status by payment hash |
+
+### Offramp (Cardano cBTC -> Lightning BTC)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/offramp/request` | Request offramp. Body: `{"bolt11": "<invoice>", "amount_cbtc": <i64>, "cardano_address": "<addr>"}` |
+| `POST` | `/offramp/deposit` | Notify cBTC deposit. Body: `{"offramp_id": <i64>, "cbtc_tx_hash": "<hash>"}` |
+| `GET` | `/offramp/status/{id}` | Query offramp status by ID |
+
+## E2E Tests
+
+Tests use [Expect](https://core.tcl-lang.org/expect/index) scripts that automate the full flow.
+
+```bash
+# Set up devnet (required before each test)
+cd lightning-liquidity-manager
+bash scripts/test_local_devnet.sh --clean
+
+# Run the channel lifecycle test (from the relay repo root)
+expect ms2_channel_lifecycle_evidence.exp  # 5 channel lifecycles (30 assertions)
 ```
-`bitcoind`'s RPC username and password likely can be found through `cat ~/.bitcoin/.cookie`.
 
-`bitcoin-network`: defaults to `testnet`. Options: `testnet`, `regtest`, and `signet`.
+Test log: [ms2_channel_lifecycle_evidence.log](ms2_channel_lifecycle_evidence.log)
 
-`ldk-peer-listening-port`: defaults to 9735.
+## CLI Commands
 
-`announced-listen-addr` and `announced-node-name`: default to nothing, disabling any public announcements of this node.
-`announced-listen-addr` can be set to an IPv4 or IPv6 address to announce that as a publicly-connectable address for this node.
-`announced-node-name` can be any string up to 32 bytes in length, representing this node's alias.
+The relay has an interactive CLI. Type `help` for all commands. Key Cardano commands:
+
+- `pool-info` — Query pool state
+- `cardano-deposit <amount>` — Deposit cBTC
+- `cardano-withdraw <amount>` — Withdraw cBTC
+- `cancel-expired` — Cancel expired invoices
+
+Standard LDK commands (`openchannel`, `closechannel`, `sendpayment`, `getinvoice`, etc.) are also available.
 
 ## License
 
-Licensed under either:
-
- * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
+Licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE) or http://www.apache.org/licenses/LICENSE-2.0).
