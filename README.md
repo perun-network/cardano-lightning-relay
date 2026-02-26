@@ -93,20 +93,37 @@ The relay exposes a REST API on port 3000 (configurable via `CARDANO_API_PORT`).
 | `POST` | `/offramp/deposit` | Notify cBTC deposit. Body: `{"offramp_id": <i64>, "cbtc_tx_hash": "<hash>"}` |
 | `GET` | `/offramp/status/{id}` | Query offramp status by ID |
 
+## Docker
+
+Build from the **parent directory** containing both `cardano-lightning-relay/` and `cardano-lightning-client/`:
+
+```bash
+docker build -f cardano-lightning-relay/Dockerfile -t cardano-lightning-relay .
+docker run --rm cardano-lightning-relay --help
+```
+
+## Nix
+
+```bash
+nix build   # produces result/bin/cardano-lightning-relay
+nix develop  # dev shell with Rust 1.85, pkg-config, openssl
+```
+
+Requires the [cardano-lightning-client](https://github.com/perun-network/cardano-lightning-client) repo as a sibling directory.
+
 ## E2E Tests
 
 Tests use [Expect](https://core.tcl-lang.org/expect/index) scripts that automate the full flow.
 
 ```bash
 # Set up devnet (required before each test)
-cd lightning-liquidity-manager
-bash scripts/test_local_devnet.sh --clean
+bash test_scripts/test_local_devnet.sh --clean
 
 # Run the channel lifecycle test (from the relay repo root)
-expect ms2_channel_lifecycle_evidence.exp  # 5 channel lifecycles (30 assertions)
+expect test_scripts/ms2_channel_lifecycle_test.exp  # 5 channel lifecycles (30 assertions)
 ```
 
-Test log: [ms2_channel_lifecycle_evidence.log](ms2_channel_lifecycle_evidence.log)
+Test evidence: [evidence_ms2/](evidence_ms2/)
 
 ## CLI Commands
 
