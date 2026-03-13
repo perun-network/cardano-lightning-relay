@@ -637,6 +637,13 @@ pub(crate) async fn poll_for_user_input(
 						println!("ERROR: Cardano not enabled. Set CARDANO_ENABLED=true with required env vars.");
 					}
 				},
+				"cancel-expired-offramps" => {
+					if let Some(ref op) = operator_agent {
+						cardano_cmds::cancel_expired_offramps(op).await;
+					} else {
+						println!("ERROR: Cardano not enabled. Set CARDANO_ENABLED=true with required env vars.");
+					}
+				},
 				"quit" | "exit" => break,
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
@@ -675,6 +682,7 @@ fn help() {
 	println!("      cardano-deposit <cbtc_amount>");
 	println!("      cardano-withdraw <cbtc_amount>");
 	println!("      cancel-expired");
+	println!("      cancel-expired-offramps");
 	println!("\n  Other:");
 	println!("      signmessage <message>");
 	println!("      nodeinfo");

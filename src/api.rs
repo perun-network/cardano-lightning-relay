@@ -54,6 +54,7 @@ pub(crate) struct SwapStatusResponse {
 	pub invoice_id: i64,
 	pub status: String,
 	pub cardano_tx_hash: Option<String>,
+	pub create_tx_hash: Option<String>,
 }
 
 // ─── Offramp types ───────────────────────────────────────────────────────────
@@ -86,6 +87,8 @@ pub(crate) struct OfframpStatusResponse {
 	pub amount_cbtc: i64,
 	pub status: String,
 	pub deposit_tx_hash: Option<String>,
+	pub create_offramp_tx_hash: Option<String>,
+	pub lightning_preimage: Option<String>,
 	pub error_message: Option<String>,
 }
 
@@ -154,7 +157,7 @@ async fn handle_swap_request(
 	Json(req): Json<SwapRequest>,
 ) -> Result<Json<SwapResponse>, Json<ErrorResponse>> {
 	// 1. Create LM invoice on Cardano
-	let (invoice_id, description) = cardano_swap::request_swap(
+	let (invoice_id, description, create_tx_hash) = cardano_swap::request_swap(
 		&*state.operator,
 		req.amount_cbtc,
 		&req.cardano_address,
@@ -191,6 +194,7 @@ async fn handle_swap_request(
 		req.amount_cbtc,
 		&req.cardano_address,
 		current_timestamp_ms() + 3_600_000,
+		&create_tx_hash,
 	);
 
 	Ok(Json(SwapResponse {
@@ -210,6 +214,7 @@ async fn handle_swap_status(
 			invoice_id: mapping.invoice_id,
 			status: format!("{:?}", mapping.status),
 			cardano_tx_hash: mapping.cardano_tx_hash,
+			create_tx_hash: mapping.create_tx_hash,
 		})),
 		None => Err(Json(ErrorResponse {
 			error: format!("swap not found for payment hash {}", hash),
@@ -352,6 +357,8 @@ async fn handle_offramp_status(
 			amount_cbtc: mapping.amount_cbtc,
 			status: mapping.status.as_str().to_string(),
 			deposit_tx_hash: mapping.deposit_tx_hash,
+			create_offramp_tx_hash: mapping.cardano_offramp_tx_hash,
+			lightning_preimage: mapping.lightning_preimage,
 			error_message: mapping.error_message,
 		})),
 		None => Err(Json(ErrorResponse {

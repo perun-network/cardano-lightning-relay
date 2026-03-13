@@ -16,12 +16,12 @@ const SWAP_PREFIX: &str = "cBTC_SWAP:";
 /// LM invoice ID (the caller is responsible for creating the BOLT11 invoice
 /// and storing it in the swap DB).
 ///
-/// Returns `(invoice_id, bolt11_description)` on success.
+/// Returns `(invoice_id, bolt11_description, create_tx_hash)` on success.
 pub(crate) async fn request_swap(
 	operator: &impl CardanoOperator,
 	amount_cbtc: i64,
 	cardano_address: &str,
-) -> Result<(i64, String), String> {
+) -> Result<(i64, String, String), String> {
 	let owner_pkh = address_to_pkh(cardano_address)?;
 
 	let now_ms = current_timestamp_ms();
@@ -43,7 +43,7 @@ pub(crate) async fn request_swap(
 	// The BOLT11 description encodes the Cardano address for swap detection
 	let description = format!("{}{}", SWAP_PREFIX, cardano_address);
 
-	Ok((invoice_id, description))
+	Ok((invoice_id, description, tx_hash))
 }
 
 /// Store a swap mapping after the BOLT11 invoice has been created.
@@ -54,6 +54,7 @@ pub(crate) fn store_swap_mapping(
 	amount_cbtc: i64,
 	cardano_address: &str,
 	expires_at: i64,
+	create_tx_hash: &str,
 ) {
 	swap_db.insert(&SwapMapping {
 		payment_hash: payment_hash.to_string(),
@@ -64,6 +65,7 @@ pub(crate) fn store_swap_mapping(
 		created_at: current_timestamp_ms(),
 		expires_at,
 		cardano_tx_hash: None,
+		create_tx_hash: Some(create_tx_hash.to_string()),
 	});
 }
 

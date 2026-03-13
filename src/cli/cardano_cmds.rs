@@ -48,6 +48,42 @@ pub(crate) async fn cardano_withdraw(operator: &Arc<OperatorAgent>, amount: i64)
 	}
 }
 
+/// Cancel expired offramps on-chain.
+pub(crate) async fn cancel_expired_offramps(operator: &Arc<OperatorAgent>) {
+	let state = match operator.agent().query_state().await {
+		Ok(s) => s,
+		Err(e) => {
+			println!("ERROR: failed to query pool state: {}", e);
+			return;
+		},
+	};
+
+	let now_ms = current_timestamp_ms();
+
+	let expired: Vec<_> = state.offramps.iter().filter(|o| o.expires_at < now_ms).collect();
+
+	if expired.is_empty() {
+		println!("No expired offramps found.");
+		return;
+	}
+
+	println!("Found {} expired offramp(s), cancelling...", expired.len());
+	for offramp in &expired {
+		println!("  Cancelling offramp #{} (expired at {})...", offramp.offramp_id, offramp.expires_at);
+		let signed_tx = match operator.cancel_offramp(offramp.offramp_id).await {
+			Ok(tx) => tx,
+			Err(e) => {
+				println!("  ERROR: failed to build cancel tx for offramp #{}: {}", offramp.offramp_id, e);
+				continue;
+			},
+		};
+		match operator.submit_tx(&signed_tx).await {
+			Ok(tx_hash) => println!("  SUCCESS: offramp #{} cancelled, tx_hash: {}", offramp.offramp_id, tx_hash),
+			Err(e) => println!("  ERROR: failed to submit cancel tx for offramp #{}: {}", offramp.offramp_id, e),
+		}
+	}
+}
+
 /// Cancel expired invoices in the pool.
 pub(crate) async fn cancel_expired(operator: &Arc<OperatorAgent>) {
 	let state = match operator.agent().query_state().await {

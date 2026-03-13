@@ -55,6 +55,7 @@ pub(crate) struct SwapMapping {
 	pub created_at: i64,
 	pub expires_at: i64,
 	pub cardano_tx_hash: Option<String>,
+	pub create_tx_hash: Option<String>,
 }
 
 pub(crate) struct SwapDb {
@@ -73,7 +74,8 @@ impl SwapDb {
 				status         TEXT NOT NULL DEFAULT 'pending',
 				created_at     INTEGER NOT NULL,
 				expires_at     INTEGER NOT NULL,
-				cardano_tx_hash TEXT
+				cardano_tx_hash TEXT,
+				create_tx_hash TEXT
 			);
 			CREATE TABLE IF NOT EXISTS offramp_mappings (
 				offramp_id             INTEGER PRIMARY KEY,
@@ -97,8 +99,8 @@ impl SwapDb {
 	pub fn insert(&self, mapping: &SwapMapping) {
 		let conn = self.conn.lock().unwrap();
 		conn.execute(
-			"INSERT INTO swap_mappings (payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at)
-			 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+			"INSERT INTO swap_mappings (payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, create_tx_hash)
+			 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
 			params![
 				mapping.payment_hash,
 				mapping.invoice_id,
@@ -107,6 +109,7 @@ impl SwapDb {
 				mapping.status.as_str(),
 				mapping.created_at,
 				mapping.expires_at,
+				mapping.create_tx_hash,
 			],
 		).expect("failed to insert swap mapping");
 	}
@@ -114,7 +117,7 @@ impl SwapDb {
 	pub fn get_by_payment_hash(&self, payment_hash: &str) -> Option<SwapMapping> {
 		let conn = self.conn.lock().unwrap();
 		conn.query_row(
-			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash
+			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash, create_tx_hash
 			 FROM swap_mappings WHERE payment_hash = ?1",
 			params![payment_hash],
 			|row| Ok(row_to_swap(row)),
@@ -132,7 +135,7 @@ impl SwapDb {
 	pub fn get_expired_pending(&self, now_ms: i64) -> Vec<SwapMapping> {
 		let conn = self.conn.lock().unwrap();
 		let mut stmt = conn.prepare(
-			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash
+			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash, create_tx_hash
 			 FROM swap_mappings WHERE status = 'pending' AND expires_at < ?1"
 		).expect("failed to prepare expired query");
 
@@ -210,6 +213,24 @@ impl SwapDb {
 			"UPDATE offramp_mappings SET cbtc_tx_hash = ?1 WHERE offramp_id = ?2",
 			params![cbtc_tx_hash, offramp_id],
 		).expect("failed to update offramp cbtc_tx_hash");
+	}
+
+	/// Get expired offramp mappings (awaiting_deposit or failed, past expires_at).
+	pub fn get_expired_offramps(&self, now_ms: i64) -> Vec<OfframpMapping> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT offramp_id, bolt11, payment_hash, amount_cbtc, cbtc_tx_hash, status, created_at,
+			        lightning_preimage, deposit_tx_hash, error_message, cardano_offramp_tx_hash,
+			        refund_address, expires_at
+			 FROM offramp_mappings
+			 WHERE status IN ('awaiting_deposit', 'failed') AND expires_at > 0 AND expires_at < ?1"
+		).expect("failed to prepare expired offramp query");
+
+		stmt.query_map(params![now_ms], |row| {
+			Ok(row_to_offramp(row))
+		}).expect("failed to query expired offramps")
+		.filter_map(|r| r.ok())
+		.collect()
 	}
 
 	/// Get the next offramp ID (max + 1).
@@ -293,6 +314,7 @@ fn row_to_swap(row: &rusqlite::Row) -> SwapMapping {
 		created_at: row.get(5).unwrap(),
 		expires_at: row.get(6).unwrap(),
 		cardano_tx_hash: row.get(7).unwrap(),
+		create_tx_hash: row.get(8).unwrap_or(None),
 	}
 }
 
@@ -377,6 +399,7 @@ mod tests {
 			created_at: 1_000_000,
 			expires_at,
 			cardano_tx_hash: None,
+			create_tx_hash: None,
 		}
 	}
 

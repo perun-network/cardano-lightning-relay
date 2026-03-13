@@ -242,8 +242,9 @@ pub(crate) async fn complete_offramp(
 	}
 }
 
-/// Called from PaymentFailed event: submit CancelOfframp TX and mark as failed.
+/// Called from PaymentFailed event: mark as failed and schedule CancelOfframp.
 pub(crate) async fn handle_offramp_payment_failed(
+	operator: Arc<impl CardanoOperator>,
 	swap_db: Arc<SwapDb>,
 	payment_hash: String,
 ) {
@@ -261,10 +262,43 @@ pub(crate) async fn handle_offramp_payment_failed(
 		mapping.offramp_id, OfframpStatus::Failed, None, None, Some(msg),
 	);
 
-	// Try to cancel the on-chain offramp entry (best-effort, may fail if not expired yet)
-	// The CancelOfframp can only succeed after expiry, so this is logged but not blocking
-	println!(
-		"Offramp #{}: on-chain entry will be cancelled after expiry (expires_at: {})",
-		mapping.offramp_id, mapping.expires_at,
-	);
+	// Try to cancel the on-chain offramp entry (best-effort)
+	// CancelOfframp can only succeed after expiry — attempt it now, log if too early
+	cancel_offramp_on_chain(&*operator, &swap_db, &mapping).await;
+}
+
+/// Submit CancelOfframp TX for a single offramp. Logs success/failure.
+pub(crate) async fn cancel_offramp_on_chain(
+	operator: &impl CardanoOperator,
+	swap_db: &SwapDb,
+	mapping: &OfframpMapping,
+) {
+	let signed_tx = match operator.cancel_offramp(mapping.offramp_id).await {
+		Ok(tx) => tx,
+		Err(e) => {
+			println!(
+				"Offramp #{}: CancelOfframp not yet possible (expires_at: {}): {}",
+				mapping.offramp_id, mapping.expires_at, e,
+			);
+			return;
+		},
+	};
+	match operator.submit_tx(&signed_tx).await {
+		Ok(tx_hash) => {
+			println!(
+				"SUCCESS: Offramp #{} cancelled on-chain, tx: {}",
+				mapping.offramp_id, tx_hash,
+			);
+			swap_db.update_offramp_status(
+				mapping.offramp_id, OfframpStatus::Failed, None, None,
+				Some(&format!("cancelled on-chain: {}", tx_hash)),
+			);
+		},
+		Err(e) => {
+			println!(
+				"Offramp #{}: failed to submit CancelOfframp tx: {}",
+				mapping.offramp_id, e,
+			);
+		},
+	}
 }

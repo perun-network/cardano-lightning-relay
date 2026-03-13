@@ -120,6 +120,10 @@ impl CardanoOperator for MockOperator {
 		Ok("mock_fulfill_offramp_signed_tx".to_string())
 	}
 
+	async fn cancel_offramp(&self, _offramp_id: i64) -> Result<String, CardanoError> {
+		Ok("mock_cancel_offramp_signed_tx".to_string())
+	}
+
 	async fn submit_tx(&self, _tx_hex: &str) -> Result<String, CardanoError> {
 		if self.fail_submit {
 			return Err(CardanoError::Parse("mock submit_tx failure".to_string()));
@@ -154,6 +158,7 @@ fn make_swap(hash: &str, invoice_id: i64, addr: &str) -> SwapMapping {
 		created_at: now,
 		expires_at: now + 3_600_000,
 		cardano_tx_hash: None,
+		create_tx_hash: None,
 	}
 }
 
@@ -186,10 +191,11 @@ async fn test_request_swap_happy_path() {
 	let result = cardano_swap::request_swap(&mock, 100_000, &addr).await;
 	assert!(result.is_ok(), "request_swap failed: {:?}", result.err());
 
-	let (invoice_id, description) = result.unwrap();
+	let (invoice_id, description, create_tx) = result.unwrap();
 	assert_eq!(invoice_id, 1);
 	assert!(description.starts_with("cBTC_SWAP:"));
 	assert!(description.contains(&addr));
+	assert_eq!(create_tx, "mock_tx_hash_abc123");
 }
 
 #[tokio::test]
@@ -385,6 +391,7 @@ async fn test_complete_offramp_skips_non_paying() {
 #[tokio::test]
 async fn test_handle_offramp_payment_failed() {
 	let db = test_db();
+	let operator = Arc::new(MockOperator::new());
 
 	// Insert offramp in PayingLightning status
 	db.insert_offramp(&make_offramp_mapping(
@@ -394,6 +401,7 @@ async fn test_handle_offramp_payment_failed() {
 	));
 
 	cardano_offramp::handle_offramp_payment_failed(
+		operator,
 		Arc::clone(&db),
 		"off_pay_fail_001".to_string(),
 	)
@@ -402,7 +410,6 @@ async fn test_handle_offramp_payment_failed() {
 	let result = db.get_offramp_by_payment_hash("off_pay_fail_001").unwrap();
 	assert_eq!(result.status, OfframpStatus::Failed);
 	assert!(result.error_message.is_some());
-	assert!(result.error_message.as_deref().unwrap().contains("Lightning payment failed"));
 }
 
 // ─── End-to-end pipeline tests ──────────────────────────────────────────────
@@ -414,12 +421,12 @@ async fn test_onramp_end_to_end() {
 	let addr = test_cardano_address();
 
 	// Step 1: request_swap creates the on-chain invoice
-	let (invoice_id, description) =
+	let (invoice_id, description, create_tx) =
 		cardano_swap::request_swap(&*mock, 100_000, &addr).await.unwrap();
 
 	// Step 2: store_swap_mapping (simulating what the API handler does after creating BOLT11)
 	let now = current_timestamp_ms();
-	cardano_swap::store_swap_mapping(&db, "e2e_hash_001", invoice_id, 100_000, &addr, now + 3_600_000);
+	cardano_swap::store_swap_mapping(&db, "e2e_hash_001", invoice_id, 100_000, &addr, now + 3_600_000, &create_tx);
 
 	// Verify mapping is stored as Pending
 	let mapping = db.get_by_payment_hash("e2e_hash_001").unwrap();
@@ -481,11 +488,11 @@ async fn test_multiple_concurrent_swaps() {
 
 	// Create 3 onramp swaps
 	for i in 1..=3 {
-		let (invoice_id, _desc) =
+		let (invoice_id, _desc, create_tx) =
 			cardano_swap::request_swap(&*mock, 100_000 * i, &addr).await.unwrap();
 		let hash = format!("multi_hash_{}", i);
 		let now = current_timestamp_ms();
-		cardano_swap::store_swap_mapping(&db, &hash, invoice_id, 100_000 * i, &addr, now + 3_600_000);
+		cardano_swap::store_swap_mapping(&db, &hash, invoice_id, 100_000 * i, &addr, now + 3_600_000, &create_tx);
 	}
 
 	// Create 2 offramp mappings

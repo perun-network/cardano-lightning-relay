@@ -18,6 +18,7 @@ pub(crate) trait CardanoOperator: Send + Sync {
 		&self, amount: i64, payment_hash: &str, refund_address: &str, expires_at: i64,
 	) -> Result<(i64, String), CardanoError>;
 	async fn fulfill_offramp(&self, offramp: &Offramp) -> Result<String, CardanoError>;
+	async fn cancel_offramp(&self, offramp_id: i64) -> Result<String, CardanoError>;
 	async fn submit_tx(&self, tx_hex: &str) -> Result<String, CardanoError>;
 }
 
@@ -50,6 +51,10 @@ impl CardanoOperator for OperatorAgent {
 
 	async fn fulfill_offramp(&self, offramp: &Offramp) -> Result<String, CardanoError> {
 		self.fulfill_offramp(offramp).await
+	}
+
+	async fn cancel_offramp(&self, offramp_id: i64) -> Result<String, CardanoError> {
+		self.cancel_offramp(offramp_id).await
 	}
 
 	async fn submit_tx(&self, tx_hex: &str) -> Result<String, CardanoError> {
