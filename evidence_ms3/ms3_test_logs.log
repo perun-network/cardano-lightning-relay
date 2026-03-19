@@ -1,0 +1,680 @@
+==========================================
+  MS3 Evidence: Comprehensive E2E Test
+==========================================
+
+Onramp amount:   50000 cBTC x 5
+Offramp amount:  50000 cBTC x 5
+Channel size:    500000 sats
+
+
+=== Section 0: Validating prerequisites ===
+
+bitcoind: OK
+testwallet: OK
+yaci-devkit API: OK
+deployment.json: OK
+plutus-applied.json: OK
+Binaries: OK
+
+=== Section 1: Extract config ===
+
+Operator address:  addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z
+Operator PKH:      49dcd6cd0caa583aa8a164b488c8fcc937db10c25a83cf217ba6511f
+Script address:    addr_test1wrjjdmje3u4xmkgkxx72854ntsnpljkhwmuefng8f0z2q3qzdn5t9
+cBTC policy:       9e370c09dd12960d273178aadc1ed7a37927bb1da36b22ac439fb672
+cBTC asset name:   63425443
+
+=== Section 2: Extract script CBOR ===
+
+Script CBOR -> /tmp/cardano_script_cbor.hex (10298 hex chars)
+
+=== Section 3: Create ADA-only collateral UTxOs ===
+
+Creating 24 ADA-only UTxOs (10 ADA each) for collateral...
+24 collateral UTxOs created
+
+=== Section 4: Clean LDK data ===
+
+Cleaned old LDK data directories
+
+=== Section 5: Start payer node (port 9736) ===
+
+spawn /home/ilja/pc-work/ldk-sample/target/release/ldk-sample ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=@127.0.0.1:18443 /home/ilja/pc-work/ldk-sample/ldk_data_standard 9736 regtest
+LDK startup successful. Enter "help" to view available commands. Press Ctrl-D to quit.
+LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs
+Local Node ID is 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31.
+> Payer node ID: 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31
+Payer node ready
+
+=== Section 6: Start relay (port 9735) ===
+
+spawn /home/ilja/pc-work/cardano-lightning-relay/target/release/cardano-lightning-relay ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=@127.0.0.1:18443 /home/ilja/pc-work/cardano-lightning-relay/ldk_data_cardano 9735 regtest
+Cardano operator agent initialized.
+Cardano swap API listening on port 3000
+LDK startup successful. Enter "help" to view available commands. Press Ctrl-D to quit.
+LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs
+Local Node ID is 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162.
+> Relay node ID: 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+Relay node ready (API already listening)
+
+=== Section 7: Connect peers and open channel ===
+
+connectpeer 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162@127.0.0.1:9735
+SUCCESS: connected to peer 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> Peer connected
+Opening channel (500000 sats)...
+openchannel 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162@127.0.0.1:9735 500000
+EVENT: initiated channel with peer 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162. 
+Channel initiated
+> Mining blocks for channel confirmation...
+Mined 6 blocks
+Waiting for nodes to sync...
+
+EVENT: Channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 with peer 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162 is pending awaiting funding lock-in!
+> listchannels
+[
+	{
+		channel_id: ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9,
+		funding_txid: b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad,
+		peer_pubkey: 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 1/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9,
+		funding_txid: b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad,
+		peer_pubkey: 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162,
+		short_channel_id: 362838837231617,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 2/15), mining...
+Mined 2 blocks
+listchannels
+[
+	{
+		channel_id: ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9,
+		funding_txid: b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad,
+		peer_pubkey: 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162,
+		short_channel_id: 362838837231617,
+		is_channel_ready: false,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		channel_can_send_payments: false,
+		public: false,
+	},
+]
+> Channel not ready (attempt 3/15), mining...
+Mined 2 blocks
+
+EVENT: Channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 with peer 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162 is ready to be used!
+> listchannels
+[
+	{
+		channel_id: ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9,
+		funding_txid: b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad,
+		peer_pubkey: 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162,
+		short_channel_id: 362838837231617,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel is ready (attempt 4)
+
+=== Section 8: Capture channel funding TX ===
+
+listchannels
+[
+	{
+		channel_id: ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9,
+		funding_txid: b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad,
+		peer_pubkey: 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162,
+		short_channel_id: 362838837231617,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 495000000,
+		available_balance_for_send_msat: 495000000,
+		available_balance_for_recv_msat: 0,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID:     ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9
+Funding TX ID:  b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad
+
+=== Section 9: Initial pool state ===
+
+Initial pool total_liquidity: 50000000 cBTC
+Initial pool available:       50000000 cBTC
+
+==========================================
+  Section 10: Onramp Swaps (5 x 50000 cBTC)
+==========================================
+
+--- Onramp 1 / 5 ---
+
+Pool before onramp 1: 50000000 cBTC
+POST /swap/request {"amount_cbtc": 50000, "cardano_address": "addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z"}
+Response: {"invoice_id":1,"bolt11":"lnbcrt500n1p5mh69fdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5mxwd34dq0he3ksuns99p6paanzkky3ewr4wl8anqmf2q98y56fdssp5lcgnjesdv597jthv5dxcsfn73xejejsx420qux3c775vvtq56l2q9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqm5duqpanyhd8yjhgwtr29us0nkel83jfnjmjqf0vnvzur3ftrpnkj3e5tugjcty35aucs7jrwhlnu3wy66wul5evpcp3pm7qjkcmakqqdsj42c","payment_hash":"d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b"}
+Payment hash: d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b
+BOLT11: lnbcrt500n1p5mh69fdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xs...
+sendpayment lnbcrt500n1p5mh69fdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5mxwd34dq0he3ksuns99p6paanzkky3ewr4wl8anqmf2q98y56fdssp5lcgnjesdv597jthv5dxcsfn73xejejsx420qux3c775vvtq56l2q9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqm5duqpanyhd8yjhgwtr29us0nkel83jfnjmjqf0vnvzur3ftrpnkj3e5tugjcty35aucs7jrwhlnu3wy66wul5evpcp3pm7qjkcmakqqdsj42c
+EVENT: initiated sending 50000 msats to 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b with preimage 042512dbffa0002493d4ee783baa096c134b56a8b08b65090b26c85766d4477a
+> PAYMENT SUCCESS
+  PASS O1-1: Lightning payment succeeded
+Polling swap status (120s max)...
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Onramp 1 COMPLETED!
+CreateInvoice TX: 28b900fab8257d8a1b83b9acbdd9819630f0e1b11782aae5367ff95e390e9ae6
+FulfillInvoice TX: 1405a17234c53ad0e2792b1b0ba6f47fc5bed02469ece07b5d60785231f162f3
+  PASS O1-2: swap status = Completed
+Pool after onramp 1: 49950000 cBTC (change: -50000)
+  PASS O1-3: pool decreased by 50000 cBTC (== 50000)
+  Onramp 1 complete: hash=d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b pool=49950000
+
+--- Onramp 2 / 5 ---
+
+Pool before onramp 2: 49950000 cBTC
+POST /swap/request {"amount_cbtc": 50000, "cardano_address": "addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z"}
+Response: {"invoice_id":2,"bolt11":"lnbcrt500n1p5mh694dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5e9x8mrfdzdxvjzqwwstvz90stcw6ydat0j2mfem7gtffueg4kzlqsp5k8erscxkeqaz2m0anef69z8l6qu0s4s9hlkyrqmhk6tvrhzyqdcq9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqd3m2r7zqrgwjw70fxujjpay4zzwjeh3d6xdyddyu3cf9x7ydelcj94k3z8pgkky2qm97kp3mut6856kd2y24hqmf4jyjtnxlypm42vqpte4664","payment_hash":"c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be"}
+Payment hash: c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be
+BOLT11: lnbcrt500n1p5mh694dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xs...
+sendpayment lnbcrt500n1p5mh694dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5e9x8mrfdzdxvjzqwwstvz90stcw6ydat0j2mfem7gtffueg4kzlqsp5k8erscxkeqaz2m0anef69z8l6qu0s4s9hlkyrqmhk6tvrhzyqdcq9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqd3m2r7zqrgwjw70fxujjpay4zzwjeh3d6xdyddyu3cf9x7ydelcj94k3z8pgkky2qm97kp3mut6856kd2y24hqmf4jyjtnxlypm42vqpte4664
+EVENT: initiated sending 50000 msats to 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be with preimage 924661ede18c330688aa86bfe3e9ca6209d3ceec2074260d8977ddd9cc28b9ed
+> PAYMENT SUCCESS
+  PASS O2-1: Lightning payment succeeded
+Polling swap status (120s max)...
+  Poll 0: status = Completed
+Onramp 2 COMPLETED!
+CreateInvoice TX: 9df24d5c7d9c0f52f0658c848e23bee2e0eb59c1a18004cdb19d3d8900400f30
+FulfillInvoice TX: ae7b7431137113e54017f89d8bc953d00fdb1443f65b3f63718006c3d196864c
+  PASS O2-2: swap status = Completed
+Pool after onramp 2: 49900000 cBTC (change: -50000)
+  PASS O2-3: pool decreased by 50000 cBTC (== 50000)
+  Onramp 2 complete: hash=c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be pool=49900000
+
+--- Onramp 3 / 5 ---
+
+Pool before onramp 3: 49900000 cBTC
+POST /swap/request {"amount_cbtc": 50000, "cardano_address": "addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z"}
+Response: {"invoice_id":3,"bolt11":"lnbcrt500n1p5mh69adr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5kf7u5s8pfqhhvv0tpkxhkpnxs5suhvrufa8w3fhaet209t2f34hssp5dzq05hjr98hepdrgc59s8scwzw57dfyda4e8clppgn768knd6zfs9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqyh3g8rel03r52zlwm6tr2agdmw8kv2aedw4uftaxty29v7jx8mepll82m6ydcuq3eugdk2qu8dcw3u3pgt036xtt03h962yrfdmsxpgqc80uvy","payment_hash":"b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f"}
+Payment hash: b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f
+BOLT11: lnbcrt500n1p5mh69adr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xs...
+sendpayment lnbcrt500n1p5mh69adr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5kf7u5s8pfqhhvv0tpkxhkpnxs5suhvrufa8w3fhaet209t2f34hssp5dzq05hjr98hepdrgc59s8scwzw57dfyda4e8clppgn768knd6zfs9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqyh3g8rel03r52zlwm6tr2agdmw8kv2aedw4uftaxty29v7jx8mepll82m6ydcuq3eugdk2qu8dcw3u3pgt036xtt03h962yrfdmsxpgqc80uvy
+EVENT: initiated sending 50000 msats to 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f with preimage 4662d36b84622ec78d0c11f1f2a3687e64800c1ef130599028dd2903653bcb39
+> PAYMENT SUCCESS
+  PASS O3-1: Lightning payment succeeded
+Polling swap status (120s max)...
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Onramp 3 COMPLETED!
+CreateInvoice TX: 80e1f63df55bf5d2d563168fe2edc710758c4fe16289df35a4f701d7bb114dde
+FulfillInvoice TX: 2a7fbd1f702e06fe5d491ff5dc0e98d22f2b399432fdeb7d85b48fb6ca8f2b1a
+  PASS O3-2: swap status = Completed
+Pool after onramp 3: 49850000 cBTC (change: -50000)
+  PASS O3-3: pool decreased by 50000 cBTC (== 50000)
+  Onramp 3 complete: hash=b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f pool=49850000
+
+--- Onramp 4 / 5 ---
+
+Pool before onramp 4: 49850000 cBTC
+POST /swap/request {"amount_cbtc": 50000, "cardano_address": "addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z"}
+Response: {"invoice_id":4,"bolt11":"lnbcrt500n1p5mh6x2dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5asuv88ws5yqj2h9v9m4za5rkmrtu3vlwvtvnvu98yffx4ryfpuassp52wfh9fxs2tvyvcs7rctcsrhq92zzq2rhkpwwwpavk4deqs7td88s9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqg2jl7nk776er5yxuu8397y69le8kar3q73p4k740zz54ng2e3rc80eps6vkftfqcwz64r4pvr2gx4wf2t0kmqa6ttdw37zy8d6lq22gp8nah2a","payment_hash":"ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b"}
+Payment hash: ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b
+BOLT11: lnbcrt500n1p5mh6x2dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xs...
+sendpayment lnbcrt500n1p5mh6x2dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5asuv88ws5yqj2h9v9m4za5rkmrtu3vlwvtvnvu98yffx4ryfpuassp52wfh9fxs2tvyvcs7rctcsrhq92zzq2rhkpwwwpavk4deqs7td88s9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqg2jl7nk776er5yxuu8397y69le8kar3q73p4k740zz54ng2e3rc80eps6vkftfqcwz64r4pvr2gx4wf2t0kmqa6ttdw37zy8d6lq22gp8nah2a
+EVENT: initiated sending 50000 msats to 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b with preimage 771e258bb82f0d50eeae49e57a1f2adfda3c0637640ae2e7e6366712fd7770ac
+> PAYMENT SUCCESS
+  PASS O4-1: Lightning payment succeeded
+Polling swap status (120s max)...
+  Poll 0: status = Fulfilling
+  Poll 1: status = Completed
+Onramp 4 COMPLETED!
+CreateInvoice TX: 021e836dda287c4557bca106b08980733d0d5496f65ce2f2b70cda65437b8ec9
+FulfillInvoice TX: eaa113773355a319feee9f758078b9d277820f7663c5a9c5d065453c2c4cd942
+  PASS O4-2: swap status = Completed
+Pool after onramp 4: 49800000 cBTC (change: -50000)
+  PASS O4-3: pool decreased by 50000 cBTC (== 50000)
+  Onramp 4 complete: hash=ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b pool=49800000
+
+--- Onramp 5 / 5 ---
+
+Pool before onramp 5: 49800000 cBTC
+POST /swap/request {"amount_cbtc": 50000, "cardano_address": "addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z"}
+Response: {"invoice_id":5,"bolt11":"lnbcrt500n1p5mh6xkdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5p07jg5xkmjhljqe3fdda6ew8zstf06nemv4q3cxafftnrtc28alssp5syvta7pphxs5hgntf3lfpu36v4rl4kf0uxc2mx8f63880sr43dkq9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqggrgwvcve8yp40052tgvjuazgasd060vqetjnjeu5v8cg9d8np95r7y89r48hsf9lqfrdsap0smqhv4yxxgj04d5gx3s6n4xml6zlrgql6cs69","payment_hash":"0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f"}
+Payment hash: 0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f
+BOLT11: lnbcrt500n1p5mh6xkdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xs...
+sendpayment lnbcrt500n1p5mh6xkdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5p07jg5xkmjhljqe3fdda6ew8zstf06nemv4q3cxafftnrtc28alssp5syvta7pphxs5hgntf3lfpu36v4rl4kf0uxc2mx8f63880sr43dkq9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqggrgwvcve8yp40052tgvjuazgasd060vqetjnjeu5v8cg9d8np95r7y89r48hsf9lqfrdsap0smqhv4yxxgj04d5gx3s6n4xml6zlrgql6cs69
+EVENT: initiated sending 50000 msats to 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> > 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f with preimage 35885743a94370180b38b9fb66edc3389c66fe109d2731d4e2b07a0144c878f2
+> PAYMENT SUCCESS
+  PASS O5-1: Lightning payment succeeded
+Polling swap status (120s max)...
+  Poll 0: status = Completed
+Onramp 5 COMPLETED!
+CreateInvoice TX: 70fd2e5d55cf2e00d01b9f4f384cee36980c879485d7e00af505188d8afe1cf9
+FulfillInvoice TX: 7223bf5b5e239c09006c706f35505b85f6e98f372d6f68b422afe10beb44f6cf
+  PASS O5-2: swap status = Completed
+Pool after onramp 5: 49750000 cBTC (change: -50000)
+  PASS O5-3: pool decreased by 50000 cBTC (== 50000)
+  Onramp 5 complete: hash=0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f pool=49750000
+
+==========================================
+  Section 11: Offramp Swaps (5 x 50000 cBTC)
+==========================================
+
+--- Mini-onramp (10000000 cBTC) to shift channel balance for offramps ---
+POST /swap/request {"amount_cbtc": 10000000, "cardano_address": "addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z"}
+Mini-onramp hash: 80cce17d5c1844f13ed5b31a49999f5b1466b05311b0d9ca8f7152842243581b
+sendpayment lnbcrt100u1p5mh6x7dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3wec8jct9x34kgur2xsuhxae5vu6nj6n5vea8semvdeukuvrtvdekxenyvuuxuetsxpmkuwt68p3h2mt6d5m85np4qd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkypp5srxwzl2urpz0z0k4kvdynxvltv2xdvznzxcdnj50w9fgggjrtqdssp5dasn8502fcnjg3zkgzmwja6t4gs2n0xu3j8fh87gzfp3rltpy5nq9qyysgqcqzp2xqrrssrzjq2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzqqqqyqq9kqqqvqqqqlgqqqqqqqqfqndtv09sx3q78qfg079d65u4r85q8ns4cp3ac5wyt8w22lhjmvxa9k7s5juy642hj33s6tfmq7kc2xzdceatj90fm8aurnmc6n4yfy6qq0a084w
+EVENT: initiated sending 10000000 msats to 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+> > 
+EVENT: successfully sent payment of 10000000 millisatoshis (fee 0 msat) from payment hash 80cce17d5c1844f13ed5b31a49999f5b1466b05311b0d9ca8f7152842243581b with preimage 2a4ce3ef78a6bd60b7dfc57f90d75771022f8c04784f60ec783e6a55836be7ad
+> Mini-onramp payment SUCCESS
+Mini-onramp completed — relay now has outbound capacity
+Mined 6 blocks
+Checking relay outbound capacity...
+
+EVENT: Accepted inbound channel (5725ee402617bc3ded93c7805c85cf2126616982866b15a00fbc7b20feb46275) from 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31> 
+EVENT: Channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 with peer 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31 is pending awaiting funding lock-in!
+> 
+EVENT: Channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 with peer 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31 is ready to be used!
+> Created LM invoice #1 on Cardano (tx: 28b900fab8257d8a1b83b9acbdd9819630f0e1b11782aae5367ff95e390e9ae6)
+
+EVENT: received payment from payment hash d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b of 50000 millisatoshis
+> LM invoice #1: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b fulfilled, cBTC sent to addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z, tx: 1405a17234c53ad0e2792b1b0ba6f47fc5bed02469ece07b5d60785231f162f3
+Created LM invoice #2 on Cardano (tx: 9df24d5c7d9c0f52f0658c848e23bee2e0eb59c1a18004cdb19d3d8900400f30)
+
+EVENT: received payment from payment hash c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be of 50000 millisatoshis
+> SUCCESS: swap c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be fulfilled, cBTC sent to addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z, tx: ae7b7431137113e54017f89d8bc953d00fdb1443f65b3f63718006c3d196864c
+Created LM invoice #3 on Cardano (tx: 80e1f63df55bf5d2d563168fe2edc710758c4fe16289df35a4f701d7bb114dde)
+
+EVENT: received payment from payment hash b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f of 50000 millisatoshis
+> LM invoice #3: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f fulfilled, cBTC sent to addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z, tx: 2a7fbd1f702e06fe5d491ff5dc0e98d22f2b399432fdeb7d85b48fb6ca8f2b1a
+Created LM invoice #4 on Cardano (tx: 021e836dda287c4557bca106b08980733d0d5496f65ce2f2b70cda65437b8ec9)
+
+EVENT: received payment from payment hash ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b of 50000 millisatoshis
+> LM invoice #4: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b fulfilled, cBTC sent to addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z, tx: eaa113773355a319feee9f758078b9d277820f7663c5a9c5d065453c2c4cd942
+Created LM invoice #5 on Cardano (tx: 70fd2e5d55cf2e00d01b9f4f384cee36980c879485d7e00af505188d8afe1cf9)
+
+EVENT: received payment from payment hash 0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f of 50000 millisatoshis
+> SUCCESS: swap 0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f fulfilled, cBTC sent to addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z, tx: 7223bf5b5e239c09006c706f35505b85f6e98f372d6f68b422afe10beb44f6cf
+Created LM invoice #6 on Cardano (tx: 1080b27b16896d3f9230fab37db1c0ae4638d8b9b980f811da7f3530ab1041fe)
+
+EVENT: received payment from payment hash 80cce17d5c1844f13ed5b31a49999f5b1466b05311b0d9ca8f7152842243581b of 10000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 80cce17d5c1844f13ed5b31a49999f5b1466b05311b0d9ca8f7152842243581b of 10000000 millisatoshis
+> LM invoice #6: not yet in on-chain state (attempt 1/12), waiting...
+SUCCESS: swap 80cce17d5c1844f13ed5b31a49999f5b1466b05311b0d9ca8f7152842243581b fulfilled, cBTC sent to addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z, tx: 47ad1d82d93cad3b5bb38d7f7ee2545319b9af028f437a75ade3c92eb6d0c6a7
+listchannels
+[
+	{
+		channel_id: ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9,
+		funding_txid: b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad,
+		peer_pubkey: 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31,
+		short_channel_id: 362838837231617,
+		is_channel_ready: true,
+		channel_value_satoshis: 500000,
+		outbound_capacity_msat: 5250000,
+		available_balance_for_send_msat: 5250000,
+		Relay outbound capacity: 5250000 msat
+available_balance_for_recv_msat: 484750000,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> 
+--- Offramp 1 / 5 ---
+
+Pool before offramp 1: 39750000 cBTC
+getinvoice 50000 3600
+SUCCESS: generated invoice: lnbcrt500n1p5mh68ddqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzpp5f65xadfql0ar0ku0hku0x8x7ffk492xfp303sdd27yu3sy8lkexssp53n2rc55mclwz49g6ysx5aw6ndulzju78s6yxc2kgwj5k7kya855s9qyysgqcqpcxqrrssrzjqd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkyqqqqyqqqtgqquqqqqlgqqqqqqqqfqulqjl0yg3v88yl0fv34agjf9qvcynktt9gyjzr8nnfqa6h948mwx5ux2yg6pz3mtlw4klkt8y2m2srkslkwdnre2xtvsf7fln9x78tsqh5tzsv
+Payer invoice: lnbcrt500n1p5mh68ddqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpj...
+> POST /offramp/request ...
+Offramp response: {"offramp_id":1,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d","status":"AwaitingDeposit"}
+Offramp ID:         1
+Operator address:   addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z
+Payment hash:       4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d
+Waiting for CreateOfframp TX to confirm...
+Sending 50000 cBTC to operator...
+cBTC self-send TX hash: db9a16aa8ecd6e5ef86f8adce5bfba175502b167c5fb0decb3ba684462c4fb26
+Waiting for TX to be indexed...
+TX indexed successfully
+POST /offramp/deposit {"offramp_id": 1, "cbtc_tx_hash": "db9a16aa8ecd6e5ef86f8adce5bfba175502b167c5fb0decb3ba684462c4fb26"}
+Deposit response: {"offramp_id":1,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d","status":"paying_lightning"}
+Deposit notification accepted, relay is paying Lightning invoice...
+Polling offramp status (120s max)...
+  Poll 0: status = completed
+Offramp 1 COMPLETED!
+CreateOfframp TX:  aa6828c3ef489a14cc6455bbfb865c2c014d76c1fd21a4ea42752788c98c9dd5
+FulfillOfframp TX: 36d626f931cb63377fa0c644caf9af41198b792fcf94787e864e0edf35cef8fb
+Lightning preimage: 4df5e9dfd3294aca3466d498065ba3673d03013c909404a5be305e23317cc0b3
+  PASS F1-1: offramp status = completed
+Pool after offramp 1: 39800000 cBTC (change: +50000)
+  PASS F1-2: pool increased by 50000 cBTC (== 50000)
+  Offramp 1 complete: id=1 cbtc_tx=db9a16aa8ecd6e5ef86f8adce5bfba175502b167c5fb0decb3ba684462c4fb26 pool=39800000
+
+--- Offramp 2 / 5 ---
+
+Pool before offramp 2: 39800000 cBTC
+
+EVENT: received payment from payment hash 4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lnbcrt500n1p5mh6gpdqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzpp5zc443dmuulz68na2ap6zjrcxtza4k0qmxusvw2pxeug2jgnszwzssp5az24mdzz73cfds4a6jtkuu65yar23e6zjan76qfe4f3uy4mr6arq9qyysgqcqpcxqrrssrzjqd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkyqqqqyqqqtgqquqqqqlgqqqqqqqqfqfrearcya6w56nvq5f8k94nea6lqg24l6vxl2f2mnz3sah053zlkrs7hp6fehawp6jeq3n5d5462dgdn7grpwyj7cdhydcgp8sqn84lgpn787zx
+Payer invoice: lnbcrt500n1p5mh6gpdqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpj...
+> POST /offramp/request ...
+Offramp response: {"offramp_id":2,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385","status":"AwaitingDeposit"}
+Offramp ID:         2
+Operator address:   addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z
+Payment hash:       162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385
+Waiting for CreateOfframp TX to confirm...
+Sending 50000 cBTC to operator...
+cBTC self-send TX hash: 3ae5cc0b74dab329f01f310aa76575906ee60d2a8a7f677aed7fd01ba251be74
+Waiting for TX to be indexed...
+TX indexed successfully
+POST /offramp/deposit {"offramp_id": 2, "cbtc_tx_hash": "3ae5cc0b74dab329f01f310aa76575906ee60d2a8a7f677aed7fd01ba251be74"}
+Deposit response: {"offramp_id":2,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385","status":"paying_lightning"}
+Deposit notification accepted, relay is paying Lightning invoice...
+Polling offramp status (120s max)...
+  Poll 0: status = completed
+Offramp 2 COMPLETED!
+CreateOfframp TX:  b10f6037c36b4e2ea0e10783645db9c56fd86694a99a0725ccea17936df684ed
+FulfillOfframp TX: 6c1ceafdd923afd0163e62db3d113d81924e98eb666498197b422f0f7f67482b
+Lightning preimage: 00813cf2a6f274032609d4dd0fb55e5fa7b6054e73615a12a5b2f10b31946081
+  PASS F2-1: offramp status = completed
+Pool after offramp 2: 39850000 cBTC (change: +50000)
+  PASS F2-2: pool increased by 50000 cBTC (== 50000)
+  Offramp 2 complete: id=2 cbtc_tx=3ae5cc0b74dab329f01f310aa76575906ee60d2a8a7f677aed7fd01ba251be74 pool=39850000
+
+--- Offramp 3 / 5 ---
+
+Pool before offramp 3: 39850000 cBTC
+
+EVENT: received payment from payment hash 162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lnbcrt500n1p5mh6g5dqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzpp5zqfz63e75qdwrcz5q0x93f89kvujagx9qg5l86ne52qe0g006qqssp50djkd8huqsf694t99wafscpf53csxfzz7nxgy4f9q0hxza7ens2q9qyysgqcqpcxqrrssrzjqd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkyqqqqyqqqtgqquqqqqlgqqqqqqqqfq3stweranxvw0hzwpg7nhpsxrqccexlt8v50qhzqczcqxtzrxyksyj4uxhtnw82d060eg2vpmte2ly3j3hh3tj453w59uddakdpjt6rsp8qnj6j
+Payer invoice: lnbcrt500n1p5mh6g5dqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpj...
+> POST /offramp/request ...
+Offramp response: {"offramp_id":3,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001","status":"AwaitingDeposit"}
+Offramp ID:         3
+Operator address:   addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z
+Payment hash:       10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001
+Waiting for CreateOfframp TX to confirm...
+Sending 50000 cBTC to operator...
+cBTC self-send TX hash: 8c007d707c14acea640e789d3b3eec2f5c663ba00c91ab474181b8b4c755d561
+Waiting for TX to be indexed...
+TX indexed successfully
+POST /offramp/deposit {"offramp_id": 3, "cbtc_tx_hash": "8c007d707c14acea640e789d3b3eec2f5c663ba00c91ab474181b8b4c755d561"}
+Deposit response: {"offramp_id":3,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001","status":"paying_lightning"}
+Deposit notification accepted, relay is paying Lightning invoice...
+Polling offramp status (120s max)...
+  Poll 0: status = completed
+Offramp 3 COMPLETED!
+CreateOfframp TX:  c25094ee5e59aff6bc381a2540dea9737714e5efede54af029af1ff0bd77c473
+FulfillOfframp TX: 52c831afa15628148a8957df127394040c181573e802d6483ce25b1df36504d2
+Lightning preimage: bb0d2a5f6036e275f3c5dd6d0df23391b667399eeebe24279ebb4940ef743b9d
+  PASS F3-1: offramp status = completed
+Pool after offramp 3: 39900000 cBTC (change: +50000)
+  PASS F3-2: pool increased by 50000 cBTC (== 50000)
+  Offramp 3 complete: id=3 cbtc_tx=8c007d707c14acea640e789d3b3eec2f5c663ba00c91ab474181b8b4c755d561 pool=39900000
+
+--- Offramp 4 / 5 ---
+
+Pool before offramp 4: 39900000 cBTC
+
+EVENT: received payment from payment hash 10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lnbcrt500n1p5mh6fgdqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzpp5sez3dwdzh6x9uf7v2n5cpwsgye5zk0488s2q305tcpwnzu0wntfssp59w8dcw04lm37wsxn2aq79hw7jgqm4ev5jweeajskdcsuc5s32tcq9qyysgqcqpcxqrrssrzjqd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkyqqqqyqqqtgqquqqqqlgqqqqqqqqfq2yrqv0056e3q9f3tq75sawkrnfxms6sh8dhrllfzvfjv3ay6ajdx5ret65decr3n7hkyqkhp5my7sa6fqn2xnapxp7cu286t4c0d6xgq5d7mdp
+Payer invoice: lnbcrt500n1p5mh6fgdqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpj...
+> POST /offramp/request ...
+Offramp response: {"offramp_id":4,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3","status":"AwaitingDeposit"}
+Offramp ID:         4
+Operator address:   addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z
+Payment hash:       864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3
+Waiting for CreateOfframp TX to confirm...
+Sending 50000 cBTC to operator...
+cBTC self-send TX hash: 40f45346838559851b73456611fccedea76c9accdbe60d79db69a3d80c33657c
+Waiting for TX to be indexed...
+TX indexed successfully
+POST /offramp/deposit {"offramp_id": 4, "cbtc_tx_hash": "40f45346838559851b73456611fccedea76c9accdbe60d79db69a3d80c33657c"}
+Deposit response: {"offramp_id":4,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3","status":"paying_lightning"}
+Deposit notification accepted, relay is paying Lightning invoice...
+Polling offramp status (120s max)...
+  Poll 0: status = completed
+Offramp 4 COMPLETED!
+CreateOfframp TX:  ebc5e6524309f513c6b8713d2115a1731e00ff168de4b36b1808d8f184a4681b
+FulfillOfframp TX: f7f984387ea330217cf9e657ed3f866117f24354e8e45d302a279e92224b5653
+Lightning preimage: e8abcb79d6171780fb9a4a3c75ec6c3cceff908583a3e05d00be129fd3583d1e
+  PASS F4-1: offramp status = completed
+Pool after offramp 4: 39950000 cBTC (change: +50000)
+  PASS F4-2: pool increased by 50000 cBTC (== 50000)
+  Offramp 4 complete: id=4 cbtc_tx=40f45346838559851b73456611fccedea76c9accdbe60d79db69a3d80c33657c pool=39950000
+
+--- Offramp 5 / 5 ---
+
+Pool before offramp 5: 39950000 cBTC
+
+EVENT: received payment from payment hash 864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lnbcrt500n1p5mh6fudqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpjnd3krzpp5lrqa5duhq5rfz4e7tehjc0g29dru9q2r25cxpe2r6p537gyz653ssp5vds04r948p8wvr52rg73n0w5yjshazsp002678u46gkryh6utfxq9qyysgqcqpcxqrrssrzjqd070avfmy7hgf7fqh748er0536sy4wh33r523qc0y6njru2kgqkyqqqqyqqqtgqquqqqqlgqqqqqqqqfqc43tyxld5qwwc2vkcpr05u0ya4xnqvqud7cvqkxmjpwt9c3ufrtkzzu8ncncjc9t39nggefcw5xp4j85vnfj0nramts889fx0c6wy0gqf4gcm9
+Payer invoice: lnbcrt500n1p5mh6fudqqnp4q2sdxxzhcguxzd9feacussve7nwg7f8p2va7z08zwlqnnpj...
+> POST /offramp/request ...
+Offramp response: {"offramp_id":5,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523","status":"AwaitingDeposit"}
+Offramp ID:         5
+Operator address:   addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z
+Payment hash:       f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523
+Waiting for CreateOfframp TX to confirm...
+Sending 50000 cBTC to operator...
+cBTC self-send TX hash: ad561012506ea01b8d17537d27814d9bd7421f5662531f222c18b807153a766e
+Waiting for TX to be indexed...
+TX indexed successfully
+POST /offramp/deposit {"offramp_id": 5, "cbtc_tx_hash": "ad561012506ea01b8d17537d27814d9bd7421f5662531f222c18b807153a766e"}
+Deposit response: {"offramp_id":5,"operator_address":"addr_test1vpyae4kdpj49sw4g59jtfzxglnyn0kcscfdg8nep0wn9z8cumzm6z","payment_hash":"f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523","status":"paying_lightning"}
+Deposit notification accepted, relay is paying Lightning invoice...
+Polling offramp status (120s max)...
+  Poll 0: status = completed
+Offramp 5 COMPLETED!
+CreateOfframp TX:  b7bcb95c5ef0ff78c9ea8d5d997d5b6cd4750905e6348099629baae77aa975d2
+FulfillOfframp TX: 15a7f5883632348c238457e4ff95467b9584fe919abd6bb3b578862cece82d35
+Lightning preimage: 3d63fc93d98094f648b86c08fe69b8472e8bb4ac389a0b546d54d46914c4063b
+  PASS F5-1: offramp status = completed
+Pool after offramp 5: 40000000 cBTC (change: +50000)
+  PASS F5-2: pool increased by 50000 cBTC (== 50000)
+  Offramp 5 complete: id=5 cbtc_tx=ad561012506ea01b8d17537d27814d9bd7421f5662531f222c18b807153a766e pool=40000000
+
+=== Section 12: Timeout / Recovery ===
+
+Timeout recovery:
+  CancelInvoice demonstrated: no (1h expiry too long for automated test)
+  CancelOfframp demonstrated: no (1h expiry too long for automated test)
+  Note: Timeout recovery requires waiting for invoice expiry (1h default). Background task auto-cancels expired invoices/offramps every 60s. CancelInvoice and CancelOfframp redeemers are tested in unit/integration tests.
+
+=== Section 13: Close channel ===
+
+Closing channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 cooperatively...
+
+EVENT: received payment from payment hash f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523 of 50000 millisatoshis
+> closechannel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162
+EVENT: initiating channel close
+> Channel close initiated
+Mining blocks for close confirmation...
+Mined 6 blocks
+Mined 6 blocks
+
+EVENT: Channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 with counterparty 035fe7f589d93d7427c905fd53e46fa4750255d78c474544187935390f8ab20162 closed due to: LocallyInitiatedCooperativeClosure
+> listchannels
+[]
+> Channel list empty (closed)
+Mined 6 blocks
+WARNING: Funding UTxO still unspent — channel may not be fully closed
+  PASS: channel closed (list empty)
+
+==========================================
+  Section 14: End-to-End Assertions
+==========================================
+
+PASS E2E-1: all 5 onramps completed
+PASS E2E-2: all 5 offramps completed
+PASS E2E-3: final pool = 40000000 (initial 50000000 - 10000000 - 250000 + 250000 = 40000000)
+PASS E2E-4: channel opened (funding=b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad) and closed
+PASS E2E-5: all payment hashes non-empty
+
+=== Section 15: Writing evidence JSON ===
+
+
+Evidence written to: /home/ilja/pc-work/cardano-lightning-docs/flows_e2e_runs/ms3_evidence.json
+
+==========================================
+         MS3 EVIDENCE SUMMARY
+==========================================
+
+Channel:
+  Funding TX:   b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad
+  Closing TX:   pending
+  Capacity:     500000 sats
+
+Onramps (5/5 completed):
+  O1: hash=d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b status=Completed pool=49950000
+        CreateInvoice TX:  28b900fab8257d8a1b83b9acbdd9819630f0e1b11782aae5367ff95e390e9ae6
+        FulfillInvoice TX: 1405a17234c53ad0e2792b1b0ba6f47fc5bed02469ece07b5d60785231f162f3
+  O2: hash=c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be status=Completed pool=49900000
+        CreateInvoice TX:  9df24d5c7d9c0f52f0658c848e23bee2e0eb59c1a18004cdb19d3d8900400f30
+        FulfillInvoice TX: ae7b7431137113e54017f89d8bc953d00fdb1443f65b3f63718006c3d196864c
+  O3: hash=b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f status=Completed pool=49850000
+        CreateInvoice TX:  80e1f63df55bf5d2d563168fe2edc710758c4fe16289df35a4f701d7bb114dde
+        FulfillInvoice TX: 2a7fbd1f702e06fe5d491ff5dc0e98d22f2b399432fdeb7d85b48fb6ca8f2b1a
+  O4: hash=ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b status=Completed pool=49800000
+        CreateInvoice TX:  021e836dda287c4557bca106b08980733d0d5496f65ce2f2b70cda65437b8ec9
+        FulfillInvoice TX: eaa113773355a319feee9f758078b9d277820f7663c5a9c5d065453c2c4cd942
+  O5: hash=0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f status=Completed pool=49750000
+        CreateInvoice TX:  70fd2e5d55cf2e00d01b9f4f384cee36980c879485d7e00af505188d8afe1cf9
+        FulfillInvoice TX: 7223bf5b5e239c09006c706f35505b85f6e98f372d6f68b422afe10beb44f6cf
+
+Offramps (5/5 completed):
+  F1: id=1 hash=4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d status=completed pool=39800000
+        cBTC TX:           db9a16aa8ecd6e5ef86f8adce5bfba175502b167c5fb0decb3ba684462c4fb26
+        CreateOfframp TX:  aa6828c3ef489a14cc6455bbfb865c2c014d76c1fd21a4ea42752788c98c9dd5
+        FulfillOfframp TX: 36d626f931cb63377fa0c644caf9af41198b792fcf94787e864e0edf35cef8fb
+        LN preimage:       4df5e9dfd3294aca3466d498065ba3673d03013c909404a5be305e23317cc0b3
+  F2: id=2 hash=162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385 status=completed pool=39850000
+        cBTC TX:           3ae5cc0b74dab329f01f310aa76575906ee60d2a8a7f677aed7fd01ba251be74
+        CreateOfframp TX:  b10f6037c36b4e2ea0e10783645db9c56fd86694a99a0725ccea17936df684ed
+        FulfillOfframp TX: 6c1ceafdd923afd0163e62db3d113d81924e98eb666498197b422f0f7f67482b
+        LN preimage:       00813cf2a6f274032609d4dd0fb55e5fa7b6054e73615a12a5b2f10b31946081
+  F3: id=3 hash=10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001 status=completed pool=39900000
+        cBTC TX:           8c007d707c14acea640e789d3b3eec2f5c663ba00c91ab474181b8b4c755d561
+        CreateOfframp TX:  c25094ee5e59aff6bc381a2540dea9737714e5efede54af029af1ff0bd77c473
+        FulfillOfframp TX: 52c831afa15628148a8957df127394040c181573e802d6483ce25b1df36504d2
+        LN preimage:       bb0d2a5f6036e275f3c5dd6d0df23391b667399eeebe24279ebb4940ef743b9d
+  F4: id=4 hash=864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3 status=completed pool=39950000
+        cBTC TX:           40f45346838559851b73456611fccedea76c9accdbe60d79db69a3d80c33657c
+        CreateOfframp TX:  ebc5e6524309f513c6b8713d2115a1731e00ff168de4b36b1808d8f184a4681b
+        FulfillOfframp TX: f7f984387ea330217cf9e657ed3f866117f24354e8e45d302a279e92224b5653
+        LN preimage:       e8abcb79d6171780fb9a4a3c75ec6c3cceff908583a3e05d00be129fd3583d1e
+  F5: id=5 hash=f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523 status=completed pool=40000000
+        cBTC TX:           ad561012506ea01b8d17537d27814d9bd7421f5662531f222c18b807153a766e
+        CreateOfframp TX:  b7bcb95c5ef0ff78c9ea8d5d997d5b6cd4750905e6348099629baae77aa975d2
+        FulfillOfframp TX: 15a7f5883632348c238457e4ff95467b9584fe919abd6bb3b578862cece82d35
+        LN preimage:       3d63fc93d98094f648b86c08fe69b8472e8bb4ac389a0b546d54d46914c4063b
+
+Pool flow:
+  Initial:  50000000 cBTC
+  Final:    40000000 cBTC
+  Expected: 40000000 cBTC (50000000 - 10000000 - 250000 + 250000)
+
+STATUS: ALL 31/31 CHECKS PASSED
+
+Evidence file: /home/ilja/pc-work/cardano-lightning-docs/flows_e2e_runs/ms3_evidence.json
+==========================================
+
+Shutting down...
+quit
+Offramp #1: CreateOfframp TX submitted (hash: aa6828c3ef489a14cc6455bbfb865c2c014d76c1fd21a4ea42752788c98c9dd5)
+Offramp #1: paying Lightning invoice (hash: 4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d)
+EVENT: initiated sending 50000 msats to 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d with preimage 4df5e9dfd3294aca3466d498065ba3673d03013c909404a5be305e23317cc0b3
+> Offramp #1: Lightning payment sent (preimage: 4df5e9dfd3294aca3466d498065ba3673d03013c909404a5be305e23317cc0b3), submitting FulfillOfframp TX...
+SUCCESS: Offramp #1 completed, FulfillOfframp TX: 36d626f931cb63377fa0c644caf9af41198b792fcf94787e864e0edf35cef8fb
+Offramp #2: CreateOfframp TX submitted (hash: b10f6037c36b4e2ea0e10783645db9c56fd86694a99a0725ccea17936df684ed)
+Offramp #2: paying Lightning invoice (hash: 162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385)
+EVENT: initiated sending 50000 msats to 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385 with preimage 00813cf2a6f274032609d4dd0fb55e5fa7b6054e73615a12a5b2f10b31946081
+> Offramp #2: Lightning payment sent (preimage: 00813cf2a6f274032609d4dd0fb55e5fa7b6054e73615a12a5b2f10b31946081), submitting FulfillOfframp TX...
+SUCCESS: Offramp #2 completed, FulfillOfframp TX: 6c1ceafdd923afd0163e62db3d113d81924e98eb666498197b422f0f7f67482b
+Offramp #3: CreateOfframp TX submitted (hash: c25094ee5e59aff6bc381a2540dea9737714e5efede54af029af1ff0bd77c473)
+Offramp #3: paying Lightning invoice (hash: 10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001)
+EVENT: initiated sending 50000 msats to 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001 with preimage bb0d2a5f6036e275f3c5dd6d0df23391b667399eeebe24279ebb4940ef743b9d
+> Offramp #3: Lightning payment sent (preimage: bb0d2a5f6036e275f3c5dd6d0df23391b667399eeebe24279ebb4940ef743b9d), submitting FulfillOfframp TX...
+SUCCESS: Offramp #3 completed, FulfillOfframp TX: 52c831afa15628148a8957df127394040c181573e802d6483ce25b1df36504d2
+Offramp #4: CreateOfframp TX submitted (hash: ebc5e6524309f513c6b8713d2115a1731e00ff168de4b36b1808d8f184a4681b)
+Offramp #4: paying Lightning invoice (hash: 864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3)
+EVENT: initiated sending 50000 msats to 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3 with preimage e8abcb79d6171780fb9a4a3c75ec6c3cceff908583a3e05d00be129fd3583d1e
+> Offramp #4: Lightning payment sent (preimage: e8abcb79d6171780fb9a4a3c75ec6c3cceff908583a3e05d00be129fd3583d1e), submitting FulfillOfframp TX...
+SUCCESS: Offramp #4 completed, FulfillOfframp TX: f7f984387ea330217cf9e657ed3f866117f24354e8e45d302a279e92224b5653
+Offramp #5: CreateOfframp TX submitted (hash: b7bcb95c5ef0ff78c9ea8d5d997d5b6cd4750905e6348099629baae77aa975d2)
+Offramp #5: paying Lightning invoice (hash: f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523)
+EVENT: initiated sending 50000 msats to 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523 with preimage 3d63fc93d98094f648b86c08fe69b8472e8bb4ac389a0b546d54d46914c4063b
+> Offramp #5: Lightning payment sent (preimage: 3d63fc93d98094f648b86c08fe69b8472e8bb4ac389a0b546d54d46914c4063b), submitting FulfillOfframp TX...
+SUCCESS: Offramp #5 completed, FulfillOfframp TX: 15a7f5883632348c238457e4ff95467b9584fe919abd6bb3b578862cece82d35
+
+EVENT: Channel ade8e9bc05d829312a64ebce5f1b3b06b33c4e2e63f667a6aa4f1099c9cd7bb9 with counterparty 02a0d31857c2386134a9cf71c84199f4dc8f24e1533be13ce277c13986536c6c31 closed due to: CounterpartyInitiatedCooperativeClosure
+> quit
+Done.
