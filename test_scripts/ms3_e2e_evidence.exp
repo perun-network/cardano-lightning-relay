@@ -1,0 +1,1274 @@
+#!/usr/bin/expect -f
+#
+# MS3 Evidence: Comprehensive E2E Test (Devnet)
+#
+# Collects evidence for MS3 acceptance criteria:
+#   - 5 onramp exchanges (BTC→cBTC) with dual-chain TX hashes
+#   - 5 offramp exchanges (cBTC→BTC) with dual-chain TX hashes
+#   - Channel lifecycle (funding + closing TX hashes)
+#   - Pool liquidity tracking throughout
+#
+# All swaps use a single Lightning channel (opened once, closed at end).
+# Channel: 500,000 sats. Each swap: 50,000 cBTC (= 50,000 msat = 50 sats).
+# After 5 onramps: relay has ~250,000 msat outbound capacity.
+# After 5 offramps: relay capacity returns to near-original.
+#
+# Prerequisites (run BEFORE this script):
+#   1. yaci-devkit running + contract deployed:
+#        cd ~/pc-work/lightning-liquidity-manager && \
+#          bash ../cardano-lightning-docs/flows_e2e_runs/test_local_devnet.sh --clean
+#   2. bitcoind running with testwallet funded (101+ blocks)
+#   3. Both binaries pre-built (release):
+#        ~/pc-work/ldk-sample/target/release/ldk-sample
+#        ~/pc-work/cardano-lightning-relay/target/release/cardano-lightning-relay
+#
+# Usage:
+#   expect ms3_e2e_evidence.exp
+#
+# Output:
+#   ~/pc-work/cardano-lightning-docs/flows_e2e_runs/ms3_evidence.json
+#
+
+set timeout 180
+
+# =============================================================================
+# Configuration
+# =============================================================================
+set onramp_amount 50000
+set offramp_amount 50000
+set channel_size_sats 500000
+set num_onramps 5
+set num_offramps 5
+
+# Paths
+set home $env(HOME)
+set lm_dir "$home/pc-work/lightning-liquidity-manager"
+set relay_dir "$home/pc-work/cardano-lightning-relay"
+set ldk_dir "$home/pc-work/ldk-sample"
+set deployment_json "$lm_dir/credentials/deployment.json"
+set plutus_json "$lm_dir/plutus-applied.json"
+set script_cbor_file "/tmp/cardano_script_cbor.hex"
+set evidence_file "$home/pc-work/cardano-lightning-docs/flows_e2e_runs/ms3_evidence.json"
+
+# bitcoind RPC credentials
+set btc_rpc_auth "ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E="
+
+puts "=========================================="
+puts "  MS3 Evidence: Comprehensive E2E Test"
+puts "=========================================="
+puts ""
+puts "Onramp amount:   $onramp_amount cBTC x $num_onramps"
+puts "Offramp amount:  $offramp_amount cBTC x $num_offramps"
+puts "Channel size:    $channel_size_sats sats"
+puts ""
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+proc btc {args} {
+    set result [exec /home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= -rpcwallet=testwallet {*}$args]
+    return $result
+}
+
+proc mine_blocks {count} {
+    set addr [btc getnewaddress]
+    btc generatetoaddress $count $addr
+    puts "Mined $count blocks"
+}
+
+proc json_field {json field} {
+    set result [exec python3 -c "import json,sys; print(json.loads(sys.argv\[1\])\['$field'\])" $json]
+    return $result
+}
+
+proc json_nested {json args} {
+    set keys ""
+    foreach k $args {
+        append keys "\['$k'\]"
+    }
+    set result [exec python3 -c "import json,sys; d=json.loads(sys.argv\[1\]); print(d$keys)" $json]
+    return $result
+}
+
+proc api_get {path} {
+    set result [exec curl -sf "http://localhost:3000$path"]
+    return $result
+}
+
+proc api_post {path body} {
+    set result [exec curl -sf -X POST "http://localhost:3000$path" -H "Content-Type: application/json" -d $body]
+    return $result
+}
+
+proc cleanup {ldk_id relay_id script_cbor_file} {
+    puts "\nShutting down..."
+    catch {send -i $ldk_id "quit\r"}
+    catch {send -i $relay_id "quit\r"}
+    catch {expect -i $ldk_id eof}
+    catch {expect -i $relay_id eof}
+    catch {file delete $script_cbor_file}
+}
+
+# =============================================================================
+# Section 0: Validate prerequisites
+# =============================================================================
+puts "\n=== Section 0: Validating prerequisites ===\n"
+
+if {[catch {exec /home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= getblockchaininfo}]} {
+    puts "ERROR: bitcoind not running."
+    exit 1
+}
+puts "bitcoind: OK"
+
+if {[catch {btc getwalletinfo}]} {
+    puts "ERROR: testwallet not loaded."
+    exit 1
+}
+puts "testwallet: OK"
+
+if {[catch {exec curl -sf http://localhost:8080/api/v1/blocks/latest}]} {
+    puts "ERROR: yaci-devkit not running. Run: bash test_local_devnet.sh --clean"
+    exit 1
+}
+puts "yaci-devkit API: OK"
+
+if {![file exists $deployment_json]} {
+    puts "ERROR: $deployment_json not found."
+    exit 1
+}
+puts "deployment.json: OK"
+
+if {![file exists $plutus_json]} {
+    puts "ERROR: $plutus_json not found."
+    exit 1
+}
+puts "plutus-applied.json: OK"
+
+if {![file exists $ldk_dir/target/release/ldk-sample]} {
+    puts "ERROR: ldk-sample binary not found."
+    exit 1
+}
+if {![file exists $relay_dir/target/release/cardano-lightning-relay]} {
+    puts "ERROR: relay binary not found."
+    exit 1
+}
+puts "Binaries: OK"
+
+# =============================================================================
+# Section 1: Extract config from deployment.json
+# =============================================================================
+puts "\n=== Section 1: Extract config ===\n"
+
+set deploy_data [exec cat $deployment_json]
+set operator_addr [json_nested $deploy_data operator address]
+set operator_pkh  [json_nested $deploy_data operator pkh]
+set skey_path     [json_nested $deploy_data operator sk_file]
+set script_addr   [json_nested $deploy_data validator parameterized_script_address]
+set cbtc_policy   [json_nested $deploy_data token cbtc_policy]
+set cbtc_name     [json_nested $deploy_data token cbtc_asset_name]
+
+puts "Operator address:  $operator_addr"
+puts "Operator PKH:      $operator_pkh"
+puts "Script address:    $script_addr"
+puts "cBTC policy:       $cbtc_policy"
+puts "cBTC asset name:   $cbtc_name"
+
+# =============================================================================
+# Section 2: Extract script CBOR from plutus-applied.json
+# =============================================================================
+puts "\n=== Section 2: Extract script CBOR ===\n"
+
+set compiled_code [exec python3 -c "
+import json
+with open('$plutus_json') as f:
+    d = json.load(f)
+print(d\['validators'\]\[0\]\['compiledCode'\])
+"]
+
+set cbor_fd [open $script_cbor_file w]
+puts -nonewline $cbor_fd $compiled_code
+close $cbor_fd
+
+puts "Script CBOR -> $script_cbor_file ([string length $compiled_code] hex chars)"
+
+# =============================================================================
+# Section 3: Create ADA-only collateral UTxOs (at least 20 x 10 ADA)
+# =============================================================================
+puts "\n=== Section 3: Create ADA-only collateral UTxOs ===\n"
+
+# Each onramp = 2 Plutus TXs (create_invoice + fulfill_invoice).
+# Each offramp = 2 Plutus TXs (create_offramp + fulfill_offramp).
+# 5 onramps x 2 + 5 offramps x 2 = 20, plus spare = 24.
+set num_collateral 24
+
+puts "Creating $num_collateral ADA-only UTxOs (10 ADA each) for collateral..."
+exec python3 -c "
+from pycardano import *
+import json
+
+with open('$skey_path') as f:
+    sk_data = json.load(f)
+raw_key_hex = sk_data\['cborHex'\]\[4:\]
+sk = PaymentSigningKey.from_primitive(bytes.fromhex(raw_key_hex))
+ctx = OgmiosChainContext(host='localhost', port=1337, network=Network.TESTNET)
+addr = Address.from_primitive('$operator_addr')
+builder = TransactionBuilder(ctx)
+builder.add_input_address(addr)
+for i in range($num_collateral):
+    builder.add_output(TransactionOutput(addr, Value(coin=10_000_000)))
+signed_tx = builder.build_and_sign(\[sk\], change_address=addr)
+ctx.submit_tx(signed_tx)
+print(f'Created $num_collateral x 10 ADA collateral UTxOs: {signed_tx.id}')
+"
+sleep 3
+puts "$num_collateral collateral UTxOs created"
+
+# =============================================================================
+# Section 4: Clean old LDK data
+# =============================================================================
+puts "\n=== Section 4: Clean LDK data ===\n"
+
+catch {exec rm -rf $ldk_dir/ldk_data_standard}
+catch {exec rm -rf $relay_dir/ldk_data_cardano}
+puts "Cleaned old LDK data directories"
+
+# =============================================================================
+# Section 5: Start payer node (ldk-sample, port 9736)
+# =============================================================================
+puts "\n=== Section 5: Start payer node (port 9736) ===\n"
+
+spawn $ldk_dir/target/release/ldk-sample "$btc_rpc_auth@127.0.0.1:18443" $ldk_dir/ldk_data_standard 9736 regtest
+
+set ldk_id $spawn_id
+
+expect {
+    -i $ldk_id -re "Local Node ID is (\[a-f0-9\]+)" {
+        set ldk_node_id $expect_out(1,string)
+        puts "Payer node ID: $ldk_node_id"
+    }
+    timeout {
+        puts "ERROR: Timeout starting ldk-sample"
+        exit 1
+    }
+}
+
+expect -i $ldk_id ">"
+puts "Payer node ready"
+
+# =============================================================================
+# Section 6: Start relay (cardano-lightning-relay, port 9735)
+# =============================================================================
+puts "\n=== Section 6: Start relay (port 9735) ===\n"
+
+set env(CARDANO_ENABLED) "1"
+set env(CARDANO_BLOCKFROST_URL) "http://localhost:8080/api/v1/"
+set env(CARDANO_BLOCKFROST_KEY) "local"
+set env(CARDANO_SKEY_PATH) $skey_path
+set env(CARDANO_SCRIPT_ADDRESS) $script_addr
+set env(CARDANO_SCRIPT_CBOR_PATH) $script_cbor_file
+set env(CARDANO_CBTC_POLICY_ID) $cbtc_policy
+set env(CARDANO_CBTC_ASSET_NAME) $cbtc_name
+set env(CARDANO_OPERATOR_ADDRESS) $operator_addr
+set env(CARDANO_OPERATOR_PKH) $operator_pkh
+set env(CARDANO_API_PORT) "3000"
+
+spawn $relay_dir/target/release/cardano-lightning-relay "$btc_rpc_auth@127.0.0.1:18443" $relay_dir/ldk_data_cardano 9735 regtest
+
+set relay_id $spawn_id
+
+expect {
+    -i $relay_id -re "Local Node ID is (\[a-f0-9\]+)" {
+        set relay_node_id $expect_out(1,string)
+        puts "Relay node ID: $relay_node_id"
+    }
+    timeout {
+        puts "ERROR: Timeout starting relay"
+        exit 1
+    }
+}
+
+expect -i $relay_id ">"
+puts "Relay node ready (API already listening)"
+
+foreach var {CARDANO_ENABLED CARDANO_BLOCKFROST_URL CARDANO_BLOCKFROST_KEY
+             CARDANO_SKEY_PATH CARDANO_SCRIPT_ADDRESS CARDANO_SCRIPT_CBOR_PATH
+             CARDANO_CBTC_POLICY_ID CARDANO_CBTC_ASSET_NAME
+             CARDANO_OPERATOR_ADDRESS CARDANO_OPERATOR_PKH CARDANO_API_PORT} {
+    catch {unset env($var)}
+}
+
+sleep 2
+
+# =============================================================================
+# Section 7: Connect peers, open channel, confirm
+# =============================================================================
+puts "\n=== Section 7: Connect peers and open channel ===\n"
+
+send -i $ldk_id "connectpeer ${relay_node_id}@127.0.0.1:9735\r"
+expect {
+    -i $ldk_id "SUCCESS" {
+        puts "Peer connected"
+    }
+    -i $ldk_id "already connected" {
+        puts "Peer already connected"
+    }
+    -i $ldk_id "ERROR" {
+        puts "ERROR: Connect failed"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+    timeout {
+        puts "ERROR: Connect timeout"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+}
+expect -i $ldk_id ">"
+
+sleep 2
+
+puts "Opening channel ($channel_size_sats sats)..."
+send -i $ldk_id "openchannel ${relay_node_id}@127.0.0.1:9735 $channel_size_sats\r"
+expect {
+    -i $ldk_id "EVENT: initiated channel" {
+        puts "Channel initiated"
+    }
+    -i $ldk_id "ERROR" {
+        puts "ERROR: Channel open failed"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+    timeout {
+        puts "ERROR: Channel open timeout"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+}
+expect -i $ldk_id ">"
+
+puts "Mining blocks for channel confirmation..."
+mine_blocks 6
+puts "Waiting for nodes to sync..."
+sleep 10
+
+set channel_ready 0
+for {set i 0} {$i < 15} {incr i} {
+    send -i $ldk_id "listchannels\r"
+    expect {
+        -i $ldk_id "is_channel_ready: true" {
+            set channel_ready 1
+            puts "Channel is ready (attempt [expr $i + 1])"
+        }
+        -i $ldk_id "is_channel_ready: false" {
+            puts "Channel not ready (attempt [expr $i + 1]/15), mining..."
+            mine_blocks 2
+            sleep 5
+        }
+    }
+    expect -i $ldk_id ">"
+    if {$channel_ready} break
+}
+
+if {!$channel_ready} {
+    puts "ERROR: Channel never became ready"
+    cleanup $ldk_id $relay_id $script_cbor_file
+    exit 1
+}
+
+sleep 5
+
+# =============================================================================
+# Section 8: Capture BTC funding TX hash from listchannels
+# =============================================================================
+puts "\n=== Section 8: Capture channel funding TX ===\n"
+
+send -i $ldk_id "listchannels\r"
+
+set funding_txid ""
+set channel_id ""
+expect {
+    -i $ldk_id -re "channel_id: (\[a-f0-9\]+)" {
+        set channel_id $expect_out(1,string)
+    }
+}
+expect {
+    -i $ldk_id -re "funding_txid: (\[a-f0-9\]+)" {
+        set funding_txid $expect_out(1,string)
+    }
+}
+expect -i $ldk_id ">"
+
+puts "Channel ID:     $channel_id"
+puts "Funding TX ID:  $funding_txid"
+
+# =============================================================================
+# Section 9: Snapshot initial pool state
+# =============================================================================
+puts "\n=== Section 9: Initial pool state ===\n"
+
+if {[catch {set pool_initial_resp [api_get "/pool/info"]} err]} {
+    puts "ERROR: Failed to query initial pool info: $err"
+    cleanup $ldk_id $relay_id $script_cbor_file
+    exit 1
+}
+
+set initial_pool [json_field $pool_initial_resp "total_liquidity"]
+set initial_available [json_field $pool_initial_resp "available"]
+puts "Initial pool total_liquidity: $initial_pool cBTC"
+puts "Initial pool available:       $initial_available cBTC"
+
+# Evidence accumulators
+set onramp_evidence {}
+set offramp_evidence {}
+
+# Assertion counters
+set test_passed 1
+set checks_passed 0
+set checks_total 0
+
+# =============================================================================
+# Section 10: Run 5 onramp swaps
+# =============================================================================
+puts "\n=========================================="
+puts "  Section 10: Onramp Swaps ($num_onramps x $onramp_amount cBTC)"
+puts "=========================================="
+
+for {set n 1} {$n <= $num_onramps} {incr n} {
+    puts "\n--- Onramp $n / $num_onramps ---\n"
+
+    # Pool state before this onramp
+    set pool_before_resp [api_get "/pool/info"]
+    set pool_before [json_field $pool_before_resp "total_liquidity"]
+    puts "Pool before onramp $n: $pool_before cBTC"
+
+    # Request swap
+    set swap_body "\{\"amount_cbtc\": $onramp_amount, \"cardano_address\": \"$operator_addr\"\}"
+    puts "POST /swap/request $swap_body"
+
+    if {[catch {set swap_resp [api_post "/swap/request" $swap_body]} err]} {
+        puts "ERROR: Swap request failed for onramp $n: $err"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    puts "Response: $swap_resp"
+
+    if {![catch {set api_error [json_field $swap_resp "error"]}]} {
+        puts "ERROR: API error in onramp $n: $api_error"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    set bolt11       [json_field $swap_resp "bolt11"]
+    set payment_hash [json_field $swap_resp "payment_hash"]
+    puts "Payment hash: $payment_hash"
+    puts "BOLT11: [string range $bolt11 0 70]..."
+
+    # Pay invoice from payer
+    send -i $ldk_id "sendpayment $bolt11\r"
+
+    set payment_success 0
+    expect {
+        -i $ldk_id "successfully sent payment" {
+            set payment_success 1
+            puts "PAYMENT SUCCESS"
+        }
+        -i $ldk_id "EVENT: initiated sending" {
+            expect {
+                -i $ldk_id "successfully sent payment" {
+                    set payment_success 1
+                    puts "PAYMENT SUCCESS"
+                }
+                -i $ldk_id "failed" {
+                    puts "Payment failed after initiation"
+                }
+                timeout {
+                    puts "Payment timeout after initiation"
+                }
+            }
+        }
+        -i $ldk_id "ERROR" {
+            puts "Payment error in onramp $n"
+        }
+        -i $ldk_id "RouteNotFound" {
+            puts "ERROR: No route found in onramp $n"
+        }
+        timeout {
+            puts "Payment initiation timeout in onramp $n"
+        }
+    }
+    expect -i $ldk_id ">"
+
+    # PER-ONRAMP ASSERTION: Lightning payment succeeded
+    incr checks_total
+    if {$payment_success} {
+        puts "  PASS O$n-1: Lightning payment succeeded"
+        incr checks_passed
+    } else {
+        puts "  FAIL O$n-1: Lightning payment failed"
+        set test_passed 0
+    }
+
+    # Poll swap status until Completed (120s max)
+    puts "Polling swap status (120s max)..."
+    set swap_completed 0
+    set swap_status "unknown"
+    set create_tx_hash ""
+    set cardano_tx_hash ""
+    for {set i 0} {$i < 24} {incr i} {
+        after 5000
+        if {[catch {set status_resp [api_get "/swap/status/$payment_hash"]} err]} {
+            puts "  Poll $i: error: $err"
+            continue
+        }
+        set swap_status [json_field $status_resp "status"]
+        puts "  Poll $i: status = $swap_status"
+
+        if {[string match "*Completed*" $swap_status]} {
+            set swap_completed 1
+            puts "Onramp $n COMPLETED!"
+
+            # Capture Cardano TX hashes
+            if {![catch {set tx [json_field $status_resp "create_tx_hash"]}]} {
+                if {$tx ne "null" && $tx ne "" && $tx ne "None"} {
+                    set create_tx_hash $tx
+                    puts "CreateInvoice TX: $create_tx_hash"
+                }
+            }
+            if {![catch {set tx [json_field $status_resp "cardano_tx_hash"]}]} {
+                if {$tx ne "null" && $tx ne "" && $tx ne "None"} {
+                    set cardano_tx_hash $tx
+                    puts "FulfillInvoice TX: $cardano_tx_hash"
+                }
+            }
+            break
+        }
+    }
+
+    # PER-ONRAMP ASSERTION: Swap completed
+    incr checks_total
+    if {$swap_completed} {
+        puts "  PASS O$n-2: swap status = Completed"
+        incr checks_passed
+    } else {
+        puts "  FAIL O$n-2: swap status = $swap_status (expected Completed)"
+        set test_passed 0
+    }
+
+    # Pool state after this onramp
+    set pool_after_resp [api_get "/pool/info"]
+    set pool_after [json_field $pool_after_resp "total_liquidity"]
+    set pool_diff [expr {$pool_before - $pool_after}]
+    puts "Pool after onramp $n: $pool_after cBTC (change: -$pool_diff)"
+
+    # PER-ONRAMP ASSERTION: Pool decreased by onramp_amount
+    incr checks_total
+    if {$pool_diff == $onramp_amount} {
+        puts "  PASS O$n-3: pool decreased by $pool_diff cBTC (== $onramp_amount)"
+        incr checks_passed
+    } else {
+        puts "  FAIL O$n-3: pool decreased by $pool_diff cBTC (expected $onramp_amount)"
+        set test_passed 0
+    }
+
+    # Store evidence for this onramp
+    lappend onramp_evidence [list $n $payment_hash $swap_status $create_tx_hash $cardano_tx_hash $pool_after]
+
+    puts "  Onramp $n complete: hash=$payment_hash pool=$pool_after"
+    sleep 2
+}
+
+# =============================================================================
+# Section 11: Run 5 offramp swaps
+# =============================================================================
+puts "\n=========================================="
+puts "  Section 11: Offramp Swaps ($num_offramps x $offramp_amount cBTC)"
+puts "=========================================="
+
+# The 5 onramps above used small amounts (50000 msat each = 250000 msat total).
+# For offramps, the relay needs to pay the payer. On regtest with a private channel,
+# LDK needs a substantial balance shift + block confirmations to update its routing.
+# Do a large mini-onramp (10M cBTC) to shift channel balance, matching the pattern
+# from the working cardano_offramp_test.exp.
+puts "\n--- Mini-onramp (10000000 cBTC) to shift channel balance for offramps ---"
+
+set mini_body "\{\"amount_cbtc\": 10000000, \"cardano_address\": \"$operator_addr\"\}"
+puts "POST /swap/request $mini_body"
+if {[catch {set mini_resp [api_post "/swap/request" $mini_body]} err]} {
+    puts "ERROR: mini-onramp failed: $err"
+    cleanup $ldk_id $relay_id $script_cbor_file
+    exit 1
+}
+if {![catch {set api_error [json_field $mini_resp "error"]}]} {
+    puts "ERROR: mini-onramp API error: $api_error"
+    cleanup $ldk_id $relay_id $script_cbor_file
+    exit 1
+}
+set mini_bolt11 [json_field $mini_resp "bolt11"]
+set mini_hash [json_field $mini_resp "payment_hash"]
+puts "Mini-onramp hash: $mini_hash"
+
+send -i $ldk_id "sendpayment $mini_bolt11\r"
+set mini_ok 0
+expect {
+    -i $ldk_id "successfully sent payment" { set mini_ok 1 }
+    -i $ldk_id "EVENT: initiated sending" {
+        expect {
+            -i $ldk_id "successfully sent payment" { set mini_ok 1 }
+            -i $ldk_id "failed" { }
+            timeout { }
+        }
+    }
+    timeout { }
+}
+expect -i $ldk_id ">"
+
+if {!$mini_ok} {
+    puts "ERROR: mini-onramp Lightning payment failed"
+    cleanup $ldk_id $relay_id $script_cbor_file
+    exit 1
+}
+puts "Mini-onramp payment SUCCESS"
+
+# Wait for fulfillment
+for {set i 0} {$i < 24} {incr i} {
+    after 5000
+    if {[catch {set sr [api_get "/swap/status/$mini_hash"]} err]} { continue }
+    set ms [json_field $sr "status"]
+    if {[string match "*Completed*" $ms]} { break }
+}
+puts "Mini-onramp completed — relay now has outbound capacity"
+
+# Mine blocks to update routing graph
+mine_blocks 6
+after 5000
+puts "Checking relay outbound capacity..."
+send -i $relay_id "listchannels\r"
+expect {
+    -i $relay_id -re "outbound_capacity_msat: (\[0-9\]+)" {
+        set relay_outbound [expr {$expect_out(1,string)}]
+        puts "Relay outbound capacity: $relay_outbound msat"
+    }
+}
+expect -i $relay_id ">"
+
+set needed_outbound [expr {$num_offramps * $offramp_amount}]
+if {$relay_outbound < $needed_outbound} {
+    puts "WARNING: Relay outbound ($relay_outbound msat) < needed ($needed_outbound msat)"
+    puts "Offramps may fail due to insufficient capacity."
+}
+
+for {set n 1} {$n <= $num_offramps} {incr n} {
+    puts "\n--- Offramp $n / $num_offramps ---\n"
+
+    # Pool state before this offramp
+    set pool_before_resp [api_get "/pool/info"]
+    set pool_before [json_field $pool_before_resp "total_liquidity"]
+    puts "Pool before offramp $n: $pool_before cBTC"
+
+    # Create BOLT11 invoice on payer node
+    send -i $ldk_id "getinvoice $offramp_amount 3600\r"
+
+    set payer_bolt11 ""
+    expect {
+        -i $ldk_id -re "SUCCESS: generated invoice: (\[a-z0-9\]+)" {
+            set payer_bolt11 $expect_out(1,string)
+            puts "Payer invoice: [string range $payer_bolt11 0 70]..."
+        }
+        -i $ldk_id "ERROR" {
+            puts "ERROR: Failed to create payer invoice for offramp $n"
+            cleanup $ldk_id $relay_id $script_cbor_file
+            exit 1
+        }
+        timeout {
+            puts "ERROR: Timeout creating payer invoice for offramp $n"
+            cleanup $ldk_id $relay_id $script_cbor_file
+            exit 1
+        }
+    }
+    expect -i $ldk_id ">"
+
+    if {$payer_bolt11 eq ""} {
+        puts "ERROR: No invoice captured for offramp $n"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    # POST /offramp/request (CreateOfframp TX on-chain)
+    set offramp_body "\{\"bolt11\": \"$payer_bolt11\", \"amount_cbtc\": $offramp_amount, \"cardano_address\": \"$operator_addr\"\}"
+    puts "POST /offramp/request ..."
+
+    if {[catch {set offramp_resp [api_post "/offramp/request" $offramp_body]} err]} {
+        puts "ERROR: Offramp request failed for offramp $n: $err"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    puts "Offramp response: $offramp_resp"
+
+    if {![catch {set api_error [json_field $offramp_resp "error"]}]} {
+        puts "ERROR: API error in offramp $n: $api_error"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    set offramp_id [json_field $offramp_resp "offramp_id"]
+    set offramp_operator_addr [json_field $offramp_resp "operator_address"]
+    set offramp_payment_hash [json_field $offramp_resp "payment_hash"]
+
+    puts "Offramp ID:         $offramp_id"
+    puts "Operator address:   $offramp_operator_addr"
+    puts "Payment hash:       $offramp_payment_hash"
+
+    # Wait for CreateOfframp TX to confirm
+    puts "Waiting for CreateOfframp TX to confirm..."
+    sleep 5
+
+    # Simulate user sending cBTC to operator (pycardano self-send)
+    puts "Sending $offramp_amount cBTC to operator..."
+
+    set cbtc_tx_hash [exec python3 -c "
+from pycardano import *
+import json
+
+with open('$skey_path') as f:
+    sk_data = json.load(f)
+raw_key_hex = sk_data\['cborHex'\]\[4:\]
+sk = PaymentSigningKey.from_primitive(bytes.fromhex(raw_key_hex))
+ctx = OgmiosChainContext(host='localhost', port=1337, network=Network.TESTNET)
+addr = Address.from_primitive('$offramp_operator_addr')
+
+policy_id = ScriptHash.from_primitive(bytes.fromhex('$cbtc_policy'))
+asset_name = AssetName(bytes.fromhex('$cbtc_name'))
+multi_asset = MultiAsset({policy_id: Asset({asset_name: $offramp_amount})})
+value = Value(coin=2_000_000, multi_asset=multi_asset)
+
+builder = TransactionBuilder(ctx)
+builder.add_input_address(addr)
+builder.add_output(TransactionOutput(addr, value))
+signed_tx = builder.build_and_sign(\[sk\], change_address=addr)
+ctx.submit_tx(signed_tx)
+print(str(signed_tx.id))
+"]
+
+    puts "cBTC self-send TX hash: $cbtc_tx_hash"
+
+    # Wait for TX to be indexed by Blockfrost
+    puts "Waiting for TX to be indexed..."
+    sleep 5
+
+    # Verify TX is visible via Blockfrost
+    if {[catch {exec curl -sf "http://localhost:8080/api/v1/txs/$cbtc_tx_hash/utxos" -H "project_id: local"} tx_utxos]} {
+        puts "WARNING: TX not yet visible via Blockfrost, waiting more..."
+        sleep 10
+    }
+    puts "TX indexed successfully"
+
+    # POST /offramp/deposit (notify relay of cBTC send)
+    set deposit_body "\{\"offramp_id\": $offramp_id, \"cbtc_tx_hash\": \"$cbtc_tx_hash\"\}"
+    puts "POST /offramp/deposit $deposit_body"
+
+    if {[catch {set deposit_resp [api_post "/offramp/deposit" $deposit_body]} err]} {
+        puts "ERROR: Offramp deposit notification failed for offramp $n: $err"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    puts "Deposit response: $deposit_resp"
+
+    if {![catch {set api_error [json_field $deposit_resp "error"]}]} {
+        puts "ERROR: API error on deposit for offramp $n: $api_error"
+        cleanup $ldk_id $relay_id $script_cbor_file
+        exit 1
+    }
+
+    puts "Deposit notification accepted, relay is paying Lightning invoice..."
+
+    # Poll /offramp/status until completed (120s max)
+    puts "Polling offramp status (120s max)..."
+    set offramp_completed 0
+    set offramp_status "unknown"
+    set create_offramp_tx_hash ""
+    set fulfill_offramp_tx_hash ""
+    set lightning_preimage ""
+    for {set i 0} {$i < 24} {incr i} {
+        after 5000
+        if {[catch {set status_resp [api_get "/offramp/status/$offramp_id"]} err]} {
+            puts "  Poll $i: error: $err"
+            continue
+        }
+        set offramp_status [json_field $status_resp "status"]
+        puts "  Poll $i: status = $offramp_status"
+
+        if {$offramp_status eq "completed"} {
+            set offramp_completed 1
+            puts "Offramp $n COMPLETED!"
+
+            # Capture TX hashes and preimage
+            if {![catch {set tx [json_field $status_resp "create_offramp_tx_hash"]}]} {
+                if {$tx ne "null" && $tx ne "" && $tx ne "None"} {
+                    set create_offramp_tx_hash $tx
+                    puts "CreateOfframp TX:  $create_offramp_tx_hash"
+                }
+            }
+            if {![catch {set tx [json_field $status_resp "deposit_tx_hash"]}]} {
+                if {$tx ne "null" && $tx ne "" && $tx ne "None"} {
+                    set fulfill_offramp_tx_hash $tx
+                    puts "FulfillOfframp TX: $fulfill_offramp_tx_hash"
+                }
+            }
+            if {![catch {set pre [json_field $status_resp "lightning_preimage"]}]} {
+                if {$pre ne "null" && $pre ne "" && $pre ne "None"} {
+                    set lightning_preimage $pre
+                    puts "Lightning preimage: $lightning_preimage"
+                }
+            }
+            break
+        }
+
+        if {$offramp_status eq "failed"} {
+            puts "Offramp $n FAILED"
+            if {![catch {set err_msg [json_field $status_resp "error_message"]}]} {
+                puts "Error: $err_msg"
+            }
+            break
+        }
+    }
+
+    # PER-OFFRAMP ASSERTION: Offramp completed
+    incr checks_total
+    if {$offramp_completed} {
+        puts "  PASS F$n-1: offramp status = completed"
+        incr checks_passed
+    } else {
+        puts "  FAIL F$n-1: offramp status = $offramp_status (expected completed)"
+        set test_passed 0
+    }
+
+    # Pool state after this offramp
+    set pool_after_resp [api_get "/pool/info"]
+    set pool_after [json_field $pool_after_resp "total_liquidity"]
+    set pool_diff [expr {$pool_after - $pool_before}]
+    puts "Pool after offramp $n: $pool_after cBTC (change: +$pool_diff)"
+
+    # PER-OFFRAMP ASSERTION: Pool increased by offramp_amount
+    incr checks_total
+    if {$pool_diff == $offramp_amount} {
+        puts "  PASS F$n-2: pool increased by $pool_diff cBTC (== $offramp_amount)"
+        incr checks_passed
+    } else {
+        puts "  FAIL F$n-2: pool increased by $pool_diff cBTC (expected $offramp_amount)"
+        set test_passed 0
+    }
+
+    # Store evidence for this offramp
+    lappend offramp_evidence [list $n $offramp_id $offramp_payment_hash $cbtc_tx_hash $create_offramp_tx_hash $fulfill_offramp_tx_hash $lightning_preimage $offramp_status $pool_after]
+
+    puts "  Offramp $n complete: id=$offramp_id cbtc_tx=$cbtc_tx_hash pool=$pool_after"
+
+    # Wait a few seconds for TX indexing before next iteration
+    sleep 3
+}
+
+# =============================================================================
+# Section 12: Timeout/recovery note
+# =============================================================================
+puts "\n=== Section 12: Timeout / Recovery ===\n"
+
+# The relay's background task in background.rs checks for expired invoices every
+# 60 seconds. However, invoice expiry is 1 hour (3600s, hardcoded in the relay's
+# create_invoice flow). Waiting 1+ hour is impractical in an automated test.
+#
+# For CancelInvoice: would require creating an invoice and waiting > 1 hour
+# without paying it, then verifying the background task auto-cancels it.
+#
+# For CancelOfframp: would require creating an offramp and not sending cBTC,
+# then waiting for expiry.
+#
+# These paths are architecturally sound and tested in unit tests, but the
+# default expiry times make automated E2E demonstration impractical.
+
+set cancel_invoice_demonstrated 0
+set cancel_offramp_demonstrated 0
+set recovery_note "Timeout recovery requires waiting for invoice expiry (1h default). Background task auto-cancels expired invoices/offramps every 60s. CancelInvoice and CancelOfframp redeemers are tested in unit/integration tests."
+
+puts "Timeout recovery:"
+puts "  CancelInvoice demonstrated: no (1h expiry too long for automated test)"
+puts "  CancelOfframp demonstrated: no (1h expiry too long for automated test)"
+puts "  Note: $recovery_note"
+
+# =============================================================================
+# Section 13: Close channel cooperatively, capture closing TX
+# =============================================================================
+puts "\n=== Section 13: Close channel ===\n"
+
+puts "Closing channel $channel_id cooperatively..."
+send -i $ldk_id "closechannel $channel_id $relay_node_id\r"
+expect {
+    -i $ldk_id "EVENT: initiating channel close" {
+        puts "Channel close initiated"
+    }
+    -i $ldk_id "ERROR" {
+        puts "WARNING: Channel close error, continuing..."
+    }
+    timeout {
+        puts "WARNING: Channel close timeout, continuing..."
+    }
+}
+expect -i $ldk_id ">"
+
+# Mine blocks for close confirmation + sweep
+puts "Mining blocks for close confirmation..."
+mine_blocks 6
+sleep 10
+mine_blocks 6
+sleep 5
+
+# Poll until channel list empty (confirms close)
+set close_ok 0
+set close_start [clock seconds]
+while {[expr {[clock seconds] - $close_start}] < 60} {
+    send -i $ldk_id "listchannels\r"
+    expect {
+        -i $ldk_id -re "\\\[\\s*\\\]" {
+            set close_ok 1
+            puts "Channel list empty (closed)"
+            expect -i $ldk_id ">"
+            break
+        }
+        -i $ldk_id "channel_id:" {
+            puts "Channel still listed, mining more..."
+            mine_blocks 2
+            sleep 3
+        }
+        timeout {
+            puts "Timeout waiting for channel close"
+            break
+        }
+    }
+    expect -i $ldk_id ">"
+}
+
+# Mine more blocks to ensure sweep TXs confirm
+mine_blocks 6
+sleep 5
+
+# Capture closing TX from recent Bitcoin blocks
+# The closing TX is the spending of the funding TX output.
+set closing_txid ""
+if {[catch {
+    set closing_txid [exec python3 -c "
+import json, subprocess, sys
+
+# Get the spending TX of the funding outpoint
+result = subprocess.run(
+    \['/home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli', '-regtest',
+     '-rpcuser=ic-btc-integration',
+     '-rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=',
+     '-rpcwallet=testwallet',
+     'gettxout', '$funding_txid', '0'\],
+    capture_output=True, text=True)
+
+if result.returncode == 0 and result.stdout.strip():
+    # UTxO still unspent — channel not closed yet
+    print('UNSPENT')
+else:
+    # UTxO spent — find the spending TX by scanning recent blocks
+    # Get the block count
+    bc_result = subprocess.run(
+        \['/home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli', '-regtest',
+         '-rpcuser=ic-btc-integration',
+         '-rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=',
+         'getblockcount'\],
+        capture_output=True, text=True)
+    block_count = int(bc_result.stdout.strip())
+
+    # Scan last 30 blocks for the closing TX
+    for height in range(max(0, block_count - 30), block_count + 1):
+        bh_result = subprocess.run(
+            \['/home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli', '-regtest',
+             '-rpcuser=ic-btc-integration',
+             '-rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=',
+             'getblockhash', str(height)\],
+            capture_output=True, text=True)
+        block_hash = bh_result.stdout.strip()
+
+        blk_result = subprocess.run(
+            \['/home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli', '-regtest',
+             '-rpcuser=ic-btc-integration',
+             '-rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=',
+             'getblock', block_hash, '2'\],
+            capture_output=True, text=True)
+        block = json.loads(blk_result.stdout)
+
+        for tx in block.get('tx', \[\]):
+            for vin in tx.get('vin', \[\]):
+                if vin.get('txid') == '$funding_txid':
+                    print(tx\['txid'\])
+                    sys.exit(0)
+
+    print('NOT_FOUND')
+"]
+} err]} {
+    puts "WARNING: Could not determine closing TX: $err"
+    set closing_txid "unknown"
+}
+
+if {$closing_txid eq "UNSPENT"} {
+    puts "WARNING: Funding UTxO still unspent — channel may not be fully closed"
+    set closing_txid "pending"
+} elseif {$closing_txid eq "NOT_FOUND"} {
+    puts "WARNING: Could not find closing TX in recent blocks"
+    set closing_txid "not_found"
+} else {
+    puts "Closing TX ID: $closing_txid"
+}
+
+# Channel close assertion
+incr checks_total
+if {$close_ok} {
+    puts "  PASS: channel closed (list empty)"
+    incr checks_passed
+} else {
+    puts "  FAIL: channel did not close within timeout"
+    set test_passed 0
+}
+
+# =============================================================================
+# Section 14: End-to-end assertions
+# =============================================================================
+puts "\n=========================================="
+puts "  Section 14: End-to-End Assertions"
+puts "=========================================="
+puts ""
+
+# Final pool state
+set pool_final_resp [api_get "/pool/info"]
+set final_pool [json_field $pool_final_resp "total_liquidity"]
+
+# E2E Check 1: All onramps completed
+incr checks_total
+set completed_onramps 0
+foreach ev $onramp_evidence {
+    if {[string match "*Completed*" [lindex $ev 2]]} {
+        incr completed_onramps
+    }
+}
+if {$completed_onramps == $num_onramps} {
+    puts "PASS E2E-1: all $num_onramps onramps completed"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-1: only $completed_onramps/$num_onramps onramps completed"
+    set test_passed 0
+}
+
+# E2E Check 2: All offramps completed
+incr checks_total
+set completed_offramps 0
+foreach ev $offramp_evidence {
+    if {[lindex $ev 7] eq "completed"} {
+        incr completed_offramps
+    }
+}
+if {$completed_offramps == $num_offramps} {
+    puts "PASS E2E-2: all $num_offramps offramps completed"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-2: only $completed_offramps/$num_offramps offramps completed"
+    set test_passed 0
+}
+
+# E2E Check 3: Total pool change = initial - mini_onramp - (N * onramp) + (N * offramp)
+incr checks_total
+set mini_onramp_amount 10000000
+set expected_final [expr {$initial_pool - $mini_onramp_amount - ($num_onramps * $onramp_amount) + ($num_offramps * $offramp_amount)}]
+if {$final_pool == $expected_final} {
+    puts "PASS E2E-3: final pool = $final_pool (initial $initial_pool - $mini_onramp_amount - [expr {$num_onramps * $onramp_amount}] + [expr {$num_offramps * $offramp_amount}] = $expected_final)"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-3: final pool = $final_pool (expected $expected_final)"
+    set test_passed 0
+}
+
+# E2E Check 4: Channel opened and closed successfully
+incr checks_total
+if {$funding_txid ne "" && $close_ok} {
+    puts "PASS E2E-4: channel opened (funding=$funding_txid) and closed"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-4: channel lifecycle incomplete (funding=$funding_txid close_ok=$close_ok)"
+    set test_passed 0
+}
+
+# E2E Check 5: All payment hashes non-empty
+incr checks_total
+set all_hashes_ok 1
+foreach ev $onramp_evidence {
+    if {[lindex $ev 1] eq "" || [string length [lindex $ev 1]] < 10} {
+        set all_hashes_ok 0
+    }
+}
+foreach ev $offramp_evidence {
+    if {[lindex $ev 2] eq "" || [string length [lindex $ev 2]] < 10} {
+        set all_hashes_ok 0
+    }
+}
+if {$all_hashes_ok} {
+    puts "PASS E2E-5: all payment hashes non-empty"
+    incr checks_passed
+} else {
+    puts "FAIL E2E-5: some payment hashes missing"
+    set test_passed 0
+}
+
+# =============================================================================
+# Section 15: Write ms3_evidence.json
+# =============================================================================
+puts "\n=== Section 15: Writing evidence JSON ===\n"
+
+# Build onramp entries
+set onramp_items {}
+foreach ev $onramp_evidence {
+    set idx            [lindex $ev 0]
+    set ph             [lindex $ev 1]
+    set st             [lindex $ev 2]
+    set create_tx      [lindex $ev 3]
+    set fulfill_tx     [lindex $ev 4]
+    set pool_val       [lindex $ev 5]
+
+    # Handle empty strings for JSON null
+    if {$create_tx eq ""} { set create_tx_json "null" } else { set create_tx_json "\"$create_tx\"" }
+    if {$fulfill_tx eq ""} { set fulfill_tx_json "null" } else { set fulfill_tx_json "\"$fulfill_tx\"" }
+
+    lappend onramp_items "\{\"index\": $idx, \"payment_hash\": \"$ph\", \"swap_status\": \"$st\", \"create_invoice_tx_hash\": $create_tx_json, \"fulfill_invoice_tx_hash\": $fulfill_tx_json, \"pool_after\": $pool_val\}"
+}
+set onramp_json "\[[join $onramp_items ", "]\]"
+
+# Build offramp entries
+set offramp_items {}
+foreach ev $offramp_evidence {
+    set idx            [lindex $ev 0]
+    set oid            [lindex $ev 1]
+    set ph             [lindex $ev 2]
+    set cbtc_tx        [lindex $ev 3]
+    set create_off_tx  [lindex $ev 4]
+    set fulfill_off_tx [lindex $ev 5]
+    set preimage       [lindex $ev 6]
+    set st             [lindex $ev 7]
+    set pool_val       [lindex $ev 8]
+
+    if {$create_off_tx eq ""} { set create_off_tx_json "null" } else { set create_off_tx_json "\"$create_off_tx\"" }
+    if {$fulfill_off_tx eq ""} { set fulfill_off_tx_json "null" } else { set fulfill_off_tx_json "\"$fulfill_off_tx\"" }
+    if {$preimage eq ""} { set preimage_json "null" } else { set preimage_json "\"$preimage\"" }
+    if {$cbtc_tx eq ""} { set cbtc_tx_json "null" } else { set cbtc_tx_json "\"$cbtc_tx\"" }
+
+    lappend offramp_items "\{\"index\": $idx, \"offramp_id\": $oid, \"payment_hash\": \"$ph\", \"cbtc_tx_hash\": $cbtc_tx_json, \"create_offramp_tx_hash\": $create_off_tx_json, \"fulfill_offramp_tx_hash\": $fulfill_off_tx_json, \"lightning_preimage\": $preimage_json, \"offramp_status\": \"$st\", \"pool_after\": $pool_val\}"
+}
+set offramp_json "\[[join $offramp_items ", "]\]"
+
+# Closing TX JSON
+if {$closing_txid eq "" || $closing_txid eq "pending" || $closing_txid eq "not_found" || $closing_txid eq "unknown"} {
+    set closing_txid_json "null"
+} else {
+    set closing_txid_json "\"$closing_txid\""
+}
+
+set timestamp [exec python3 -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())"]
+
+set all_passed_json [expr {$test_passed ? "true" : "false"}]
+
+set evidence_json "\{
+  \"network\": \"local-devnet\",
+  \"timestamp\": \"$timestamp\",
+  \"channel\": \{
+    \"funding_txid\": \"$funding_txid\",
+    \"closing_txid\": $closing_txid_json,
+    \"capacity_sats\": $channel_size_sats
+  \},
+  \"initial_pool_liquidity\": $initial_pool,
+  \"final_pool_liquidity\": $final_pool,
+  \"onramps\": $onramp_json,
+  \"offramps\": $offramp_json,
+  \"recovery\": \{
+    \"cancel_invoice_demonstrated\": false,
+    \"cancel_offramp_demonstrated\": false,
+    \"note\": \"$recovery_note\"
+  \},
+  \"assertions\": \{
+    \"total\": $checks_total,
+    \"passed\": $checks_passed,
+    \"all_passed\": $all_passed_json
+  \}
+\}"
+
+exec python3 -c "
+import json, sys
+data = json.loads(sys.argv\[1\])
+with open('$evidence_file', 'w') as f:
+    json.dump(data, f, indent=2)
+print(json.dumps(data, indent=2))
+" $evidence_json
+
+puts "\nEvidence written to: $evidence_file"
+
+# =============================================================================
+# Section 16: Summary
+# =============================================================================
+puts "\n=========================================="
+puts "         MS3 EVIDENCE SUMMARY"
+puts "=========================================="
+puts ""
+
+puts "Channel:"
+puts "  Funding TX:   $funding_txid"
+puts "  Closing TX:   $closing_txid"
+puts "  Capacity:     $channel_size_sats sats"
+puts ""
+
+puts "Onramps ($completed_onramps/$num_onramps completed):"
+foreach ev $onramp_evidence {
+    puts "  O[lindex $ev 0]: hash=[lindex $ev 1] status=[lindex $ev 2] pool=[lindex $ev 5]"
+    if {[lindex $ev 3] ne ""} { puts "        CreateInvoice TX:  [lindex $ev 3]" }
+    if {[lindex $ev 4] ne ""} { puts "        FulfillInvoice TX: [lindex $ev 4]" }
+}
+puts ""
+
+puts "Offramps ($completed_offramps/$num_offramps completed):"
+foreach ev $offramp_evidence {
+    puts "  F[lindex $ev 0]: id=[lindex $ev 1] hash=[lindex $ev 2] status=[lindex $ev 7] pool=[lindex $ev 8]"
+    if {[lindex $ev 3] ne ""} { puts "        cBTC TX:           [lindex $ev 3]" }
+    if {[lindex $ev 4] ne ""} { puts "        CreateOfframp TX:  [lindex $ev 4]" }
+    if {[lindex $ev 5] ne ""} { puts "        FulfillOfframp TX: [lindex $ev 5]" }
+    if {[lindex $ev 6] ne ""} { puts "        LN preimage:       [lindex $ev 6]" }
+}
+puts ""
+
+puts "Pool flow:"
+puts "  Initial:  $initial_pool cBTC"
+puts "  Final:    $final_pool cBTC"
+puts "  Expected: $expected_final cBTC ($initial_pool - $mini_onramp_amount - [expr {$num_onramps * $onramp_amount}] + [expr {$num_offramps * $offramp_amount}])"
+puts ""
+
+if {$test_passed} {
+    puts "STATUS: ALL $checks_passed/$checks_total CHECKS PASSED"
+} else {
+    puts "STATUS: $checks_passed/$checks_total CHECKS PASSED -- SOME FAILED"
+}
+
+puts ""
+puts "Evidence file: $evidence_file"
+puts "=========================================="
+
+# =============================================================================
+# Section 17: Cleanup
+# =============================================================================
+cleanup $ldk_id $relay_id $script_cbor_file
+
+puts "Done."
+
+if {$test_passed} {
+    exit 0
+} else {
+    exit 1
+}

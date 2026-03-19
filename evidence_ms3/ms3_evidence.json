@@ -1,0 +1,120 @@
+{
+  "network": "local-devnet",
+  "timestamp": "2026-03-19T12:17:39.880130+00:00",
+  "channel": {
+    "funding_txid": "b87bcdc999104faaa667f6632e4e3cb3063b1b5fceeb642a3129d805bce9e8ad",
+    "closing_txid": null,
+    "capacity_sats": 500000
+  },
+  "initial_pool_liquidity": 50000000,
+  "final_pool_liquidity": 40000000,
+  "onramps": [
+    {
+      "index": 1,
+      "payment_hash": "d99cd8d5a07df31b4393814a1d07bd98ad62472e1d5df3f660da54029c94d25b",
+      "swap_status": "Completed",
+      "create_invoice_tx_hash": "28b900fab8257d8a1b83b9acbdd9819630f0e1b11782aae5367ff95e390e9ae6",
+      "fulfill_invoice_tx_hash": "1405a17234c53ad0e2792b1b0ba6f47fc5bed02469ece07b5d60785231f162f3",
+      "pool_after": 49950000
+    },
+    {
+      "index": 2,
+      "payment_hash": "c94c7d8d2d134cc9080e7416c115f05e1da237ab7c95b4e77e42d29e6515b0be",
+      "swap_status": "Completed",
+      "create_invoice_tx_hash": "9df24d5c7d9c0f52f0658c848e23bee2e0eb59c1a18004cdb19d3d8900400f30",
+      "fulfill_invoice_tx_hash": "ae7b7431137113e54017f89d8bc953d00fdb1443f65b3f63718006c3d196864c",
+      "pool_after": 49900000
+    },
+    {
+      "index": 3,
+      "payment_hash": "b27dca40e1482f7631eb0d8d7b06668521cbb07c4f4ee8a6fdcad4f2ad498d6f",
+      "swap_status": "Completed",
+      "create_invoice_tx_hash": "80e1f63df55bf5d2d563168fe2edc710758c4fe16289df35a4f701d7bb114dde",
+      "fulfill_invoice_tx_hash": "2a7fbd1f702e06fe5d491ff5dc0e98d22f2b399432fdeb7d85b48fb6ca8f2b1a",
+      "pool_after": 49850000
+    },
+    {
+      "index": 4,
+      "payment_hash": "ec38c39dd0a101255cac2eea2ed076d8d7c8b3ee62d93670a722526a8c890f3b",
+      "swap_status": "Completed",
+      "create_invoice_tx_hash": "021e836dda287c4557bca106b08980733d0d5496f65ce2f2b70cda65437b8ec9",
+      "fulfill_invoice_tx_hash": "eaa113773355a319feee9f758078b9d277820f7663c5a9c5d065453c2c4cd942",
+      "pool_after": 49800000
+    },
+    {
+      "index": 5,
+      "payment_hash": "0bfd2450d6dcaff903314b5bdd65c7141697ea79db2a08e0dd4a5731af0a3f7f",
+      "swap_status": "Completed",
+      "create_invoice_tx_hash": "70fd2e5d55cf2e00d01b9f4f384cee36980c879485d7e00af505188d8afe1cf9",
+      "fulfill_invoice_tx_hash": "7223bf5b5e239c09006c706f35505b85f6e98f372d6f68b422afe10beb44f6cf",
+      "pool_after": 49750000
+    }
+  ],
+  "offramps": [
+    {
+      "index": 1,
+      "offramp_id": 1,
+      "payment_hash": "4ea86eb520fbfa37db8fbdb8f31cde4a6d52a8c90c5f1835aaf1391810ffb64d",
+      "cbtc_tx_hash": "db9a16aa8ecd6e5ef86f8adce5bfba175502b167c5fb0decb3ba684462c4fb26",
+      "create_offramp_tx_hash": "aa6828c3ef489a14cc6455bbfb865c2c014d76c1fd21a4ea42752788c98c9dd5",
+      "fulfill_offramp_tx_hash": "36d626f931cb63377fa0c644caf9af41198b792fcf94787e864e0edf35cef8fb",
+      "lightning_preimage": "4df5e9dfd3294aca3466d498065ba3673d03013c909404a5be305e23317cc0b3",
+      "offramp_status": "completed",
+      "pool_after": 39800000
+    },
+    {
+      "index": 2,
+      "offramp_id": 2,
+      "payment_hash": "162b58b77ce7c5a3cfaae874290f0658bb5b3c1b3720c72826cf10a922701385",
+      "cbtc_tx_hash": "3ae5cc0b74dab329f01f310aa76575906ee60d2a8a7f677aed7fd01ba251be74",
+      "create_offramp_tx_hash": "b10f6037c36b4e2ea0e10783645db9c56fd86694a99a0725ccea17936df684ed",
+      "fulfill_offramp_tx_hash": "6c1ceafdd923afd0163e62db3d113d81924e98eb666498197b422f0f7f67482b",
+      "lightning_preimage": "00813cf2a6f274032609d4dd0fb55e5fa7b6054e73615a12a5b2f10b31946081",
+      "offramp_status": "completed",
+      "pool_after": 39850000
+    },
+    {
+      "index": 3,
+      "offramp_id": 3,
+      "payment_hash": "10122d473ea01ae1e05403cc58a4e5b3392ea0c50229f3ea79a28197a1efd001",
+      "cbtc_tx_hash": "8c007d707c14acea640e789d3b3eec2f5c663ba00c91ab474181b8b4c755d561",
+      "create_offramp_tx_hash": "c25094ee5e59aff6bc381a2540dea9737714e5efede54af029af1ff0bd77c473",
+      "fulfill_offramp_tx_hash": "52c831afa15628148a8957df127394040c181573e802d6483ce25b1df36504d2",
+      "lightning_preimage": "bb0d2a5f6036e275f3c5dd6d0df23391b667399eeebe24279ebb4940ef743b9d",
+      "offramp_status": "completed",
+      "pool_after": 39900000
+    },
+    {
+      "index": 4,
+      "offramp_id": 4,
+      "payment_hash": "864516b9a2be8c5e27cc54e980ba0826682b3ea73c1408be8bc05d3171ee9ad3",
+      "cbtc_tx_hash": "40f45346838559851b73456611fccedea76c9accdbe60d79db69a3d80c33657c",
+      "create_offramp_tx_hash": "ebc5e6524309f513c6b8713d2115a1731e00ff168de4b36b1808d8f184a4681b",
+      "fulfill_offramp_tx_hash": "f7f984387ea330217cf9e657ed3f866117f24354e8e45d302a279e92224b5653",
+      "lightning_preimage": "e8abcb79d6171780fb9a4a3c75ec6c3cceff908583a3e05d00be129fd3583d1e",
+      "offramp_status": "completed",
+      "pool_after": 39950000
+    },
+    {
+      "index": 5,
+      "offramp_id": 5,
+      "payment_hash": "f8c1da3797050691573e5e6f2c3d0a2b47c28143553060e543d0691f2082d523",
+      "cbtc_tx_hash": "ad561012506ea01b8d17537d27814d9bd7421f5662531f222c18b807153a766e",
+      "create_offramp_tx_hash": "b7bcb95c5ef0ff78c9ea8d5d997d5b6cd4750905e6348099629baae77aa975d2",
+      "fulfill_offramp_tx_hash": "15a7f5883632348c238457e4ff95467b9584fe919abd6bb3b578862cece82d35",
+      "lightning_preimage": "3d63fc93d98094f648b86c08fe69b8472e8bb4ac389a0b546d54d46914c4063b",
+      "offramp_status": "completed",
+      "pool_after": 40000000
+    }
+  ],
+  "recovery": {
+    "cancel_invoice_demonstrated": false,
+    "cancel_offramp_demonstrated": false,
+    "note": "Timeout recovery requires waiting for invoice expiry (1h default). Background task auto-cancels expired invoices/offramps every 60s. CancelInvoice and CancelOfframp redeemers are tested in unit/integration tests."
+  },
+  "assertions": {
+    "total": 31,
+    "passed": 31,
+    "all_passed": true
+  }
+}
