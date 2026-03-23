@@ -113,7 +113,8 @@ pub(crate) struct PoolDepositRequest {
 pub(crate) struct PoolDepositResponse {
 	pub tx_hash: String,
 	pub amount: i64,
-	pub new_total_liquidity: i64,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub new_total_liquidity: Option<i64>,
 }
 
 // ─── Pool withdraw types ────────────────────────────────────────────────────
@@ -127,7 +128,8 @@ pub(crate) struct PoolWithdrawRequest {
 pub(crate) struct PoolWithdrawResponse {
 	pub tx_hash: String,
 	pub amount: i64,
-	pub new_total_liquidity: i64,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub new_total_liquidity: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -254,10 +256,9 @@ async fn handle_pool_deposit(
 		.await
 		.map_err(|e| Json(ErrorResponse { error: format!("submit failed: {}", e) }))?;
 
-	let new_total = match state.operator.agent().query_state().await {
-		Ok(s) => s.total_liquidity,
-		Err(_) => req.amount, // fallback
-	};
+	let new_total = state.operator.agent().query_state().await
+		.ok()
+		.map(|s| s.total_liquidity);
 
 	Ok(Json(PoolDepositResponse {
 		tx_hash,
@@ -282,10 +283,9 @@ async fn handle_pool_withdraw(
 		.await
 		.map_err(|e| Json(ErrorResponse { error: format!("submit failed: {}", e) }))?;
 
-	let new_total = match state.operator.agent().query_state().await {
-		Ok(s) => s.total_liquidity,
-		Err(_) => 0, // fallback
-	};
+	let new_total = state.operator.agent().query_state().await
+		.ok()
+		.map(|s| s.total_liquidity);
 
 	Ok(Json(PoolWithdrawResponse {
 		tx_hash,
