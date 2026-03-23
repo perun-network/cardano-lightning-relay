@@ -686,6 +686,10 @@ async fn start_ldk() {
 
 	// Start REST API server for swap requests (if Cardano is enabled)
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
+		let auth_token = std::env::var("CARDANO_API_AUTH_TOKEN").ok();
+		if auth_token.is_some() {
+			println!("API operator auth enabled (bearer token required for pool deposit/withdraw)");
+		}
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),
 			swap_db: Arc::clone(db),
@@ -693,6 +697,7 @@ async fn start_ldk() {
 			inbound_payments: Arc::clone(&inbound_payments),
 			outbound_payments: Arc::clone(&outbound_payments),
 			fs_store: Arc::clone(&fs_store),
+			auth_token,
 		};
 		let api_port: u16 = std::env::var("CARDANO_API_PORT")
 			.unwrap_or_else(|_| "3000".into())

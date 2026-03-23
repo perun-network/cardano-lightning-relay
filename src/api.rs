@@ -1,13 +1,16 @@
 //! REST API for external clients to request swaps and query status.
 //!
-//! Endpoints:
+//! Public endpoints (no auth):
 //!   POST /swap/request       — Create an onramp swap (LM invoice + BOLT11)
 //!   GET  /swap/status/:hash  — Query onramp swap status
 //!   GET  /pool/info          — Query pool state
-//!   POST /pool/deposit        — Deposit cBTC into pool
-//!   POST /pool/withdraw       — Withdraw cBTC from pool
 //!   POST /offramp/request    — Request offramp (cBTC → Lightning)
+//!   POST /offramp/deposit    — Notify relay of cBTC deposit
 //!   GET  /offramp/status/:id — Query offramp status
+//!
+//! Operator endpoints (bearer token required):
+//!   POST /pool/deposit       — Deposit cBTC into pool
+//!   POST /pool/withdraw      — Withdraw cBTC from pool
 
 use crate::cardano_offramp;
 use crate::cardano_swap;
@@ -16,12 +19,14 @@ use crate::helpers::current_timestamp_ms;
 use crate::mapping::SwapDb;
 use crate::types::{ChannelManager, InboundPaymentInfoStorage, OutboundPaymentInfoStorage};
 use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use cardano_lightning_client::OperatorAgent;
 use lightning_persister::fs_store::FilesystemStore;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
 pub(crate) struct ApiState {
@@ -31,6 +36,7 @@ pub(crate) struct ApiState {
 	pub inbound_payments: Arc<Mutex<InboundPaymentInfoStorage>>,
 	pub outbound_payments: Arc<Mutex<OutboundPaymentInfoStorage>>,
 	pub fs_store: Arc<FilesystemStore>,
+	pub auth_token: Option<String>,
 }
 
 // ─── Onramp types ────────────────────────────────────────────────────────────
@@ -137,19 +143,44 @@ pub(crate) struct ErrorResponse {
 	pub error: String,
 }
 
+// ─── Auth helper ─────────────────────────────────────────────────────────────
+
+fn verify_operator_auth(
+	headers: &HeaderMap, auth_token: &Option<String>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+	let token = match auth_token {
+		Some(t) => t,
+		None => return Ok(()), // no token configured = auth disabled
+	};
+	let header = headers
+		.get("authorization")
+		.and_then(|v| v.to_str().ok())
+		.and_then(|v| v.strip_prefix("Bearer "));
+	match header {
+		Some(provided) if provided == token => Ok(()),
+		_ => Err((
+			StatusCode::UNAUTHORIZED,
+			Json(ErrorResponse { error: "unauthorized: invalid or missing bearer token".into() }),
+		)),
+	}
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 pub(crate) fn create_router(state: ApiState) -> Router {
 	Router::new()
+		// Public endpoints
 		.route("/swap/request", post(handle_swap_request))
 		.route("/swap/status/{hash}", get(handle_swap_status))
 		.route("/pool/info", get(handle_pool_info))
-		.route("/pool/deposit", post(handle_pool_deposit))
-		.route("/pool/withdraw", post(handle_pool_withdraw))
 		.route("/offramp/request", post(handle_offramp_request))
 		.route("/offramp/deposit", post(handle_offramp_deposit))
 		.route("/offramp/status/{id}", get(handle_offramp_status))
+		// Operator endpoints (bearer token required)
+		.route("/pool/deposit", post(handle_pool_deposit))
+		.route("/pool/withdraw", post(handle_pool_withdraw))
 		.with_state(state)
+		.layer(CorsLayer::permissive())
 }
 
 // ─── Onramp handlers ────────────────────────────────────────────────────────
@@ -242,19 +273,23 @@ async fn handle_pool_info(
 
 async fn handle_pool_deposit(
 	State(state): State<ApiState>,
+	headers: HeaderMap,
 	Json(req): Json<PoolDepositRequest>,
-) -> Result<Json<PoolDepositResponse>, Json<ErrorResponse>> {
+) -> Result<Json<PoolDepositResponse>, (StatusCode, Json<ErrorResponse>)> {
+	verify_operator_auth(&headers, &state.auth_token)?;
 	let signed_tx = state
 		.operator
 		.deposit(req.amount)
 		.await
-		.map_err(|e| Json(ErrorResponse { error: format!("deposit failed: {}", e) }))?;
+		.map_err(|e| (StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: format!("deposit failed: {}", e) })))?;
 
 	let tx_hash = state
 		.operator
 		.submit_tx(&signed_tx)
 		.await
-		.map_err(|e| Json(ErrorResponse { error: format!("submit failed: {}", e) }))?;
+		.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR,
+			Json(ErrorResponse { error: format!("submit failed: {}", e) })))?;
 
 	let new_total = state.operator.agent().query_state().await
 		.ok()
@@ -269,19 +304,23 @@ async fn handle_pool_deposit(
 
 async fn handle_pool_withdraw(
 	State(state): State<ApiState>,
+	headers: HeaderMap,
 	Json(req): Json<PoolWithdrawRequest>,
-) -> Result<Json<PoolWithdrawResponse>, Json<ErrorResponse>> {
+) -> Result<Json<PoolWithdrawResponse>, (StatusCode, Json<ErrorResponse>)> {
+	verify_operator_auth(&headers, &state.auth_token)?;
 	let signed_tx = state
 		.operator
 		.withdraw(req.amount)
 		.await
-		.map_err(|e| Json(ErrorResponse { error: format!("withdraw failed: {}", e) }))?;
+		.map_err(|e| (StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: format!("withdraw failed: {}", e) })))?;
 
 	let tx_hash = state
 		.operator
 		.submit_tx(&signed_tx)
 		.await
-		.map_err(|e| Json(ErrorResponse { error: format!("submit failed: {}", e) }))?;
+		.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR,
+			Json(ErrorResponse { error: format!("submit failed: {}", e) })))?;
 
 	let new_total = state.operator.agent().query_state().await
 		.ok()
