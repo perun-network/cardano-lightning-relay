@@ -1,3 +1,4 @@
+use crate::cardano_offramp;
 use crate::cli;
 use crate::helpers::current_timestamp_ms;
 use crate::mapping::{SwapDb, SwapStatus};
@@ -122,6 +123,27 @@ pub(crate) async fn monitor_expired_swaps(
 						mapping.invoice_id, e);
 				},
 			}
+		}
+	}
+}
+
+/// Periodically check for expired offramp mappings and cancel them on-chain.
+pub(crate) async fn monitor_expired_offramps(
+	operator: Arc<OperatorAgent>, swap_db: Arc<SwapDb>,
+) {
+	// Check every 60 seconds for expired offramps
+	let mut interval = tokio::time::interval(Duration::from_secs(60));
+	loop {
+		interval.tick().await;
+
+		let now_ms = current_timestamp_ms();
+
+		let expired = swap_db.get_expired_offramps(now_ms);
+		for mapping in &expired {
+			println!("Cancelling expired offramp #{} (payment_hash: {})",
+				mapping.offramp_id, mapping.payment_hash);
+
+			cardano_offramp::cancel_offramp_on_chain(&*operator, &swap_db, mapping).await;
 		}
 	}
 }

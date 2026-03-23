@@ -672,9 +672,13 @@ async fn start_ldk() {
 		Arc::clone(&output_sweeper),
 	));
 
-	// Start expiry monitor for Cardano swaps
+	// Start expiry monitors for Cardano swaps and offramps
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
 		tokio::spawn(background::monitor_expired_swaps(
+			Arc::clone(op),
+			Arc::clone(db),
+		));
+		tokio::spawn(background::monitor_expired_offramps(
 			Arc::clone(op),
 			Arc::clone(db),
 		));
