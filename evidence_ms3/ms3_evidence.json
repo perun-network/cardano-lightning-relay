@@ -110,7 +110,7 @@
   "recovery": {
     "cancel_invoice_demonstrated": false,
     "cancel_offramp_demonstrated": false,
-    "note": "Timeout recovery requires waiting for invoice expiry (1h default). Background task auto-cancels expired invoices/offramps every 60s. CancelInvoice and CancelOfframp redeemers are tested in unit/integration tests."
+    "note": "Timeout recovery requires waiting for invoice expiry (1h default). Background tasks auto-cancel expired invoices and expired offramps every 60s. CancelInvoice and CancelOfframp redeemers are tested in unit/integration tests."
   },
   "assertions": {
     "total": 31,

@@ -1,0 +1,21 @@
+## v0.3.0 - Volta
+
+Lightning-to-Cardano bridge relay — MS3 fallback-path delivery.
+Funds are locked on both sides (Lightning + Cardano), with timeout/HTLC recovery.
+
+### Features
+- Onramp swaps (Lightning BTC → Cardano cBTC): CreateInvoice/FulfillInvoice
+- Offramp swaps (Cardano cBTC → Lightning BTC): CreateOfframp/FulfillOfframp
+- Automatic timeout recovery: background tasks auto-cancel expired invoices and offramps
+- Pool liquidity management (deposit/withdraw) via REST API and CLI
+- CancelInvoice and CancelOfframp redeemers for on-chain recovery
+
+### E2E Evidence
+- 5 onramp + 5 offramp end-to-end exchanges on local devnet
+- 31/31 assertions passed
+- All Cardano TX hashes and Lightning payment hashes recorded
+- Pool liquidity conservation verified (50M → 40M after channel balance shift)
+
+### Infrastructure
+- CI: cargo test on all branches
+- Apache-2.0 license

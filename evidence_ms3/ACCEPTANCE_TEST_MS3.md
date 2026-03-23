@@ -61,13 +61,13 @@ Each offramp: user creates Lightning invoice → relay submits CreateOfframp TX 
 ## Pool Liquidity Flow
 
 ```
-Initial:          50,000,000 cBTC
-After mini-onramp: 39,750,000 cBTC  (- 10,250,000 for channel balance shift + 5 onramps)
-After 5 onramps:  49,750,000 cBTC  (- 250,000)
-After 5 offramps: 40,000,000 cBTC  (+ 250,000)
-Final:            40,000,000 cBTC
+Initial:           50,000,000 cBTC
+After 5 onramps:   49,750,000 cBTC  (- 250,000)
+After mini-onramp: 39,750,000 cBTC  (- 10,000,000 for channel balance shift)
+After 5 offramps:  40,000,000 cBTC  (+ 250,000)
+Final:             40,000,000 cBTC
 
-Conservation: 50,000,000 - 10,000,000 (mini) - 250,000 (onramps) + 250,000 (offramps) = 40,000,000 ✓
+Conservation: 50,000,000 - 250,000 (onramps) - 10,000,000 (mini) + 250,000 (offramps) = 40,000,000 ✓
 ```
 
 ---
@@ -92,7 +92,7 @@ Conservation: 50,000,000 - 10,000,000 (mini) - 250,000 (onramps) + 250,000 (offr
 | Integration tests pass | 31/31 assertions passed |
 | Logs recorded | `ms3_test_logs.log`, `ms3_evidence.json` |
 | TX hashes (Bitcoin + Cardano) | Channel funding TX + 20 Cardano TXs (tables above) |
-| Repo public, CI green | Relay CI: all passing. LM CI: all passing. |
+| Repo public, CI green | Relay CI: [passing](https://github.com/perun-network/cardano-lightning-relay/actions/runs/23300470386). LM CI: [passing](https://github.com/perun-network/lightning-liquidity-manager/actions/runs/23297504161). |
 
 ---
 
