@@ -233,6 +233,98 @@ impl SwapDb {
 		.collect()
 	}
 
+	/// List recent onramp swaps, ordered by creation time (newest first).
+	pub fn list_recent_swaps(&self, limit: i64) -> Vec<SwapMapping> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash, create_tx_hash
+			 FROM swap_mappings ORDER BY created_at DESC LIMIT ?1"
+		).expect("failed to prepare recent swaps query");
+
+		stmt.query_map(params![limit], |row| {
+			Ok(row_to_swap(row))
+		}).expect("failed to query recent swaps")
+		.filter_map(|r| r.ok())
+		.collect()
+	}
+
+	/// List recent offramp swaps, ordered by creation time (newest first).
+	pub fn list_recent_offramps(&self, limit: i64) -> Vec<OfframpMapping> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT offramp_id, bolt11, payment_hash, amount_cbtc, cbtc_tx_hash, status, created_at,
+			        lightning_preimage, deposit_tx_hash, error_message, cardano_offramp_tx_hash,
+			        refund_address, expires_at
+			 FROM offramp_mappings ORDER BY created_at DESC LIMIT ?1"
+		).expect("failed to prepare recent offramps query");
+
+		stmt.query_map(params![limit], |row| {
+			Ok(row_to_offramp(row))
+		}).expect("failed to query recent offramps")
+		.filter_map(|r| r.ok())
+		.collect()
+	}
+
+	/// Get counts of swaps by status.
+	pub fn get_swap_counts(&self) -> Vec<(String, i64)> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT status, COUNT(*) FROM swap_mappings GROUP BY status"
+		).expect("failed to prepare swap counts query");
+
+		stmt.query_map([], |row| {
+			Ok((row.get::<_, String>(0).unwrap(), row.get::<_, i64>(1).unwrap()))
+		}).expect("failed to query swap counts")
+		.filter_map(|r| r.ok())
+		.collect()
+	}
+
+	/// Get counts of offramps by status.
+	pub fn get_offramp_counts(&self) -> Vec<(String, i64)> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT status, COUNT(*) FROM offramp_mappings GROUP BY status"
+		).expect("failed to prepare offramp counts query");
+
+		stmt.query_map([], |row| {
+			Ok((row.get::<_, String>(0).unwrap(), row.get::<_, i64>(1).unwrap()))
+		}).expect("failed to query offramp counts")
+		.filter_map(|r| r.ok())
+		.collect()
+	}
+
+	/// Get swaps stuck in a given status (for crash recovery).
+	pub fn get_by_status(&self, status: SwapStatus) -> Vec<SwapMapping> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT payment_hash, invoice_id, amount_cbtc, cardano_address, status, created_at, expires_at, cardano_tx_hash, create_tx_hash
+			 FROM swap_mappings WHERE status = ?1"
+		).expect("failed to prepare status query");
+
+		stmt.query_map(params![status.as_str()], |row| {
+			Ok(row_to_swap(row))
+		}).expect("failed to query by status")
+		.filter_map(|r| r.ok())
+		.collect()
+	}
+
+	/// Get offramps stuck in a given status (for crash recovery).
+	pub fn get_offramps_by_status(&self, status: OfframpStatus) -> Vec<OfframpMapping> {
+		let conn = self.conn.lock().unwrap();
+		let mut stmt = conn.prepare(
+			"SELECT offramp_id, bolt11, payment_hash, amount_cbtc, cbtc_tx_hash, status, created_at,
+			        lightning_preimage, deposit_tx_hash, error_message, cardano_offramp_tx_hash,
+			        refund_address, expires_at
+			 FROM offramp_mappings WHERE status = ?1"
+		).expect("failed to prepare offramp status query");
+
+		stmt.query_map(params![status.as_str()], |row| {
+			Ok(row_to_offramp(row))
+		}).expect("failed to query offramps by status")
+		.filter_map(|r| r.ok())
+		.collect()
+	}
+
 	/// Get the next offramp ID (max + 1).
 	pub fn next_offramp_id(&self) -> i64 {
 		let conn = self.conn.lock().unwrap();

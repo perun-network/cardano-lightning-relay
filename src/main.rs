@@ -12,6 +12,7 @@ mod events;
 mod helpers;
 mod hex_utils;
 mod mapping;
+mod recovery;
 mod sweep;
 mod types;
 
@@ -672,6 +673,12 @@ async fn start_ldk() {
 		Arc::clone(&output_sweeper),
 	));
 
+	// Recover stuck swaps/offramps from previous crash
+	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
+		recovery::recover_fulfilling_swaps(op, db).await;
+		recovery::recover_depositing_offramps(op, db).await;
+	}
+
 	// Start expiry monitors for Cardano swaps and offramps
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
 		tokio::spawn(background::monitor_expired_swaps(
@@ -686,6 +693,10 @@ async fn start_ldk() {
 
 	// Start REST API server for swap requests (if Cardano is enabled)
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
+		let auth_token = std::env::var("CARDANO_API_AUTH_TOKEN").ok();
+		if auth_token.is_some() {
+			println!("API operator auth enabled (bearer token required for pool deposit/withdraw)");
+		}
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),
 			swap_db: Arc::clone(db),
@@ -693,6 +704,10 @@ async fn start_ldk() {
 			inbound_payments: Arc::clone(&inbound_payments),
 			outbound_payments: Arc::clone(&outbound_payments),
 			fs_store: Arc::clone(&fs_store),
+			auth_token,
+			rate_limiter: Arc::new(std::sync::Mutex::new(
+				api::RateLimiter::new(10, 60), // 10 requests per minute per IP
+			)),
 		};
 		let api_port: u16 = std::env::var("CARDANO_API_PORT")
 			.unwrap_or_else(|_| "3000".into())
@@ -704,7 +719,7 @@ async fn start_ldk() {
 			.expect("failed to bind API server");
 		println!("Cardano swap API listening on port {}", api_port);
 		tokio::spawn(async move {
-			axum::serve(listener, router).await.unwrap();
+			axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap();
 		});
 	}
 
