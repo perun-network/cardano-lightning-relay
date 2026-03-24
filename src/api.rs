@@ -142,6 +142,15 @@ pub(crate) struct PoolInfoResponse {
 	pub active_invoices: usize,
 }
 
+#[derive(Serialize)]
+pub(crate) struct RelayInfoResponse {
+	pub operator_address: String,
+	pub script_address: String,
+	pub cbtc_policy_id: String,
+	pub cbtc_asset_name: String,
+	pub exchange_rate: f64,
+}
+
 // ─── Pool deposit types ─────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -220,6 +229,7 @@ fn verify_operator_auth(
 pub(crate) fn create_router(state: ApiState) -> Router {
 	Router::new()
 		// Public endpoints
+		.route("/info", get(handle_relay_info))
 		.route("/swap/request", post(handle_swap_request))
 		.route("/swap/status/{hash}", get(handle_swap_status))
 		.route("/swap/history", get(handle_swap_history))
@@ -311,6 +321,19 @@ async fn handle_swap_status(
 			error: format!("swap not found for payment hash {}", hash),
 		})),
 	}
+}
+
+async fn handle_relay_info(
+	State(state): State<ApiState>,
+) -> Json<RelayInfoResponse> {
+	let config = state.operator.config();
+	Json(RelayInfoResponse {
+		operator_address: config.operator_address.clone(),
+		script_address: state.operator.agent().config().script_address.clone(),
+		cbtc_policy_id: config.cbtc_policy.clone(),
+		cbtc_asset_name: config.cbtc_name.clone(),
+		exchange_rate: 1.0, // TODO: configurable exchange rate
+	})
 }
 
 async fn handle_pool_info(
