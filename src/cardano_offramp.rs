@@ -258,17 +258,49 @@ pub(crate) async fn handle_offramp_payment_failed(
 		None => return,
 	};
 
-	let msg = "Lightning payment failed";
 	println!(
-		"ERROR: Offramp #{}: {} (cBTC at operator address, manual refund needed)",
-		mapping.offramp_id, msg,
-	);
-	swap_db.update_offramp_status(
-		mapping.offramp_id, OfframpStatus::Failed, None, None, Some(msg),
+		"ERROR: Offramp #{}: Lightning payment failed, attempting cBTC refund to {}",
+		mapping.offramp_id, mapping.refund_address,
 	);
 
-	// Try to cancel the on-chain offramp entry (best-effort)
-	// CancelOfframp can only succeed after expiry — attempt it now, log if too early
+	// Try to refund cBTC to user's refund address (best-effort)
+	if !mapping.refund_address.is_empty() {
+		match operator.send_cbtc(&mapping.refund_address, mapping.amount_cbtc).await {
+			Ok(signed_tx) => {
+				match operator.submit_tx(&signed_tx).await {
+					Ok(tx_hash) => {
+						let msg = format!("Lightning payment failed, cBTC refunded: {}", tx_hash);
+						println!("Offramp #{}: {}", mapping.offramp_id, msg);
+						swap_db.update_offramp_status(
+							mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
+						);
+					},
+					Err(e) => {
+						let msg = format!("Lightning payment failed, refund submit failed: {}", e);
+						println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
+						swap_db.update_offramp_status(
+							mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
+						);
+					},
+				}
+			},
+			Err(e) => {
+				let msg = format!("Lightning payment failed, refund build failed: {}", e);
+				println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
+				swap_db.update_offramp_status(
+					mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
+				);
+			},
+		}
+	} else {
+		let msg = "Lightning payment failed, no refund address available";
+		println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
+		swap_db.update_offramp_status(
+			mapping.offramp_id, OfframpStatus::Failed, None, None, Some(msg),
+		);
+	}
+
+	// Also try to cancel the on-chain offramp entry (best-effort)
 	cancel_offramp_on_chain(&*operator, &swap_db, &mapping).await;
 }
 
