@@ -257,6 +257,24 @@ async fn handle_swap_request(
 		return Err((StatusCode::TOO_MANY_REQUESTS,
 			Json(ErrorResponse { error: "rate limit exceeded, try again later".into() })));
 	}
+
+	// Input validation
+	if req.amount_cbtc <= 0 || req.amount_cbtc > 10_000_000_000 {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "amount must be between 1 and 10,000,000,000 cBTC".into() })));
+	}
+
+	// Liquidity pre-check
+	if let Ok(pool_state) = state.operator.agent().query_state().await {
+		if req.amount_cbtc > pool_state.available() {
+			return Err((StatusCode::BAD_REQUEST,
+				Json(ErrorResponse { error: format!(
+					"insufficient pool liquidity: requested {} but only {} available",
+					req.amount_cbtc, pool_state.available()
+				)})));
+		}
+	}
+
 	// 1. Create LM invoice on Cardano
 	let (invoice_id, description, create_tx_hash) = cardano_swap::request_swap(
 		&*state.operator,
@@ -425,6 +443,13 @@ async fn handle_offramp_request(
 		return Err((StatusCode::TOO_MANY_REQUESTS,
 			Json(ErrorResponse { error: "rate limit exceeded, try again later".into() })));
 	}
+
+	// Input validation
+	if req.amount_cbtc <= 0 || req.amount_cbtc > 10_000_000_000 {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "amount must be between 1 and 10,000,000,000 cBTC".into() })));
+	}
+
 	let (offramp_id, operator_address, payment_hash) = cardano_offramp::request_offramp(
 		&*state.operator,
 		&state.swap_db,

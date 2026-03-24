@@ -103,23 +103,27 @@ pub(crate) async fn process_offramp_deposit(
 	let mapping = swap_db.get_offramp_by_id(offramp_id)
 		.ok_or_else(|| format!("offramp {} not found", offramp_id))?;
 
-	if mapping.status != OfframpStatus::AwaitingDeposit {
+	// Atomic status transition: only proceed if still AwaitingDeposit (prevents double-fulfillment)
+	if !swap_db.transition_offramp_status(
+		offramp_id, OfframpStatus::AwaitingDeposit, OfframpStatus::PendingVerification,
+	) {
 		return Err(format!(
-			"offramp {} is in status {:?}, expected AwaitingDeposit",
-			offramp_id, mapping.status,
+			"offramp {} is not in AwaitingDeposit status (concurrent request or already processed)",
+			offramp_id,
 		));
 	}
 
-	// 1. Verify cBTC arrived at operator address
-	swap_db.update_offramp_status(
-		offramp_id, OfframpStatus::PendingVerification, None, None, None,
-	);
-	swap_db.update_offramp_cbtc_tx(offramp_id, cbtc_tx_hash);
-
+	// 1. Verify cBTC arrived at operator address BEFORE storing the TX hash
 	let received = operator
 		.verify_cbtc_received(cbtc_tx_hash, mapping.amount_cbtc)
 		.await
-		.map_err(|e| format!("failed to verify cBTC receipt: {}", e))?;
+		.map_err(|e| {
+			// Revert status on verification error
+			swap_db.update_offramp_status(
+				offramp_id, OfframpStatus::AwaitingDeposit, None, None, None,
+			);
+			format!("failed to verify cBTC receipt: {}", e)
+		})?;
 
 	if !received {
 		swap_db.update_offramp_status(
@@ -132,7 +136,8 @@ pub(crate) async fn process_offramp_deposit(
 		));
 	}
 
-	// 2. Pay user's Lightning invoice
+	// Store verified TX hash and transition to PayingLightning
+	swap_db.update_offramp_cbtc_tx(offramp_id, cbtc_tx_hash);
 	swap_db.update_offramp_status(
 		offramp_id, OfframpStatus::PayingLightning, None, None, None,
 	);

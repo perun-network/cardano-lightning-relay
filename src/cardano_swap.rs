@@ -83,12 +83,18 @@ pub(crate) async fn fulfill_swap(
 		None => return, // Not a swap payment, ignore
 	};
 
-	if mapping.status != SwapStatus::Pending {
-		println!("Swap {} already in status {:?}, skipping", payment_hash, mapping.status);
+	// Atomic transition: only proceed if still Pending (prevents double-fulfillment)
+	if !swap_db.transition_status(&payment_hash, SwapStatus::Pending, SwapStatus::Fulfilling, None) {
+		println!("Swap {} not in Pending status, skipping (concurrent or already processed)", payment_hash);
 		return;
 	}
 
-	swap_db.update_status(&payment_hash, SwapStatus::Fulfilling, None);
+	// Check if the on-chain invoice has expired
+	if current_timestamp_ms() > mapping.expires_at {
+		println!("Swap {} expired (expires_at: {}), marking failed", payment_hash, mapping.expires_at);
+		swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
+		return;
+	}
 
 	// Query the current state to find the invoice (retry while TX confirms).
 	let invoice_id = mapping.invoice_id;
