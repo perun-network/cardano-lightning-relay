@@ -71,13 +71,33 @@ pub(crate) async fn recover_fulfilling_swaps(
 	}
 }
 
-/// Recover offramps stuck in DepositingToPool status.
+/// Recover offramps stuck in PayingLightning or DepositingToPool status.
 ///
-/// Lightning payment was sent but FulfillOfframp TX was never submitted.
+/// PayingLightning: Lightning payment may or may not have been sent. Check on-chain
+/// state — if offramp still exists, it was not yet fulfilled. Mark as failed so the
+/// background expiry monitor can cancel it.
+///
+/// DepositingToPool: Lightning payment was sent but FulfillOfframp TX was never submitted.
 /// Query on-chain state and retry.
 pub(crate) async fn recover_depositing_offramps(
 	operator: &OperatorAgent, swap_db: &SwapDb,
 ) {
+	// Recover PayingLightning — we can't retry the Lightning payment on startup
+	// (no invoice state preserved), so mark as failed for expiry handling.
+	let paying = swap_db.get_offramps_by_status(OfframpStatus::PayingLightning);
+	if !paying.is_empty() {
+		println!("Recovery: found {} offramp(s) stuck in PayingLightning", paying.len());
+		for mapping in &paying {
+			println!("Recovery: offramp #{} stuck in PayingLightning, marking failed for expiry recovery",
+				mapping.offramp_id);
+			swap_db.update_offramp_status(
+				mapping.offramp_id, OfframpStatus::Failed, None, None,
+				Some("relay crashed during Lightning payment, awaiting expiry for on-chain cancel"),
+			);
+		}
+	}
+
+	// Recover DepositingToPool
 	let stuck = swap_db.get_offramps_by_status(OfframpStatus::DepositingToPool);
 	if stuck.is_empty() {
 		return;

@@ -65,6 +65,7 @@ pub(crate) struct SwapDb {
 impl SwapDb {
 	pub fn open(path: &str) -> Self {
 		let conn = Connection::open(path).expect("failed to open swap database");
+		conn.execute_batch("PRAGMA journal_mode=WAL;").expect("failed to enable WAL mode");
 		conn.execute_batch(
 			"CREATE TABLE IF NOT EXISTS swap_mappings (
 				payment_hash   TEXT PRIMARY KEY,
@@ -130,6 +131,20 @@ impl SwapDb {
 			"UPDATE swap_mappings SET status = ?1, cardano_tx_hash = ?2 WHERE payment_hash = ?3",
 			params![status.as_str(), tx_hash, payment_hash],
 		).expect("failed to update swap status");
+	}
+
+	/// Atomically transition swap status only if current status matches expected.
+	/// Returns true if the update was applied, false if the status had already changed.
+	pub fn transition_status(
+		&self, payment_hash: &str, expected: SwapStatus, new: SwapStatus, tx_hash: Option<&str>,
+	) -> bool {
+		let conn = self.conn.lock().unwrap();
+		let rows = conn.execute(
+			"UPDATE swap_mappings SET status = ?1, cardano_tx_hash = ?2
+			 WHERE payment_hash = ?3 AND status = ?4",
+			params![new.as_str(), tx_hash, payment_hash, expected.as_str()],
+		).expect("failed to transition swap status");
+		rows > 0
 	}
 
 	pub fn get_expired_pending(&self, now_ms: i64) -> Vec<SwapMapping> {
@@ -205,6 +220,19 @@ impl SwapDb {
 			 WHERE offramp_id = ?5",
 			params![status.as_str(), preimage, deposit_tx_hash, error_message, offramp_id],
 		).expect("failed to update offramp status");
+	}
+
+	/// Atomically transition offramp status only if current status matches expected.
+	/// Returns true if the update was applied.
+	pub fn transition_offramp_status(
+		&self, offramp_id: i64, expected: OfframpStatus, new: OfframpStatus,
+	) -> bool {
+		let conn = self.conn.lock().unwrap();
+		let rows = conn.execute(
+			"UPDATE offramp_mappings SET status = ?1 WHERE offramp_id = ?2 AND status = ?3",
+			params![new.as_str(), offramp_id, expected.as_str()],
+		).expect("failed to transition offramp status");
+		rows > 0
 	}
 
 	pub fn update_offramp_cbtc_tx(&self, offramp_id: i64, cbtc_tx_hash: &str) {
