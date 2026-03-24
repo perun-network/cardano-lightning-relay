@@ -124,6 +124,10 @@ impl CardanoOperator for MockOperator {
 		Ok("mock_cancel_offramp_signed_tx".to_string())
 	}
 
+	async fn send_cbtc(&self, _target: &str, _amount: i64) -> Result<String, CardanoError> {
+		Ok("mock_send_cbtc_signed_tx".to_string())
+	}
+
 	async fn submit_tx(&self, _tx_hex: &str) -> Result<String, CardanoError> {
 		if self.fail_submit {
 			return Err(CardanoError::Parse("mock submit_tx failure".to_string()));
