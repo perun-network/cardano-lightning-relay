@@ -470,8 +470,13 @@ async fn handle_offramp_request(
 
 async fn handle_offramp_deposit(
 	State(state): State<ApiState>,
+	ConnectInfo(addr): ConnectInfo<SocketAddr>,
 	Json(req): Json<OfframpDepositRequest>,
-) -> Result<Json<OfframpResponse>, Json<ErrorResponse>> {
+) -> Result<Json<OfframpResponse>, (StatusCode, Json<ErrorResponse>)> {
+	if !state.rate_limiter.lock().unwrap().check(addr.ip()) {
+		return Err((StatusCode::TOO_MANY_REQUESTS,
+			Json(ErrorResponse { error: "rate limit exceeded, try again later".into() })));
+	}
 	cardano_offramp::process_offramp_deposit(
 		&state.operator,
 		&state.swap_db,
@@ -482,11 +487,12 @@ async fn handle_offramp_deposit(
 		&req.cbtc_tx_hash,
 	)
 	.await
-	.map_err(|e| Json(ErrorResponse { error: e }))?;
+	.map_err(|e| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e })))?;
 
 	// Get the updated mapping for response
 	let mapping = state.swap_db.get_offramp_by_id(req.offramp_id)
-		.ok_or_else(|| Json(ErrorResponse { error: "offramp not found".into() }))?;
+		.ok_or_else(|| (StatusCode::NOT_FOUND,
+			Json(ErrorResponse { error: "offramp not found".into() })))?;
 
 	Ok(Json(OfframpResponse {
 		offramp_id: req.offramp_id,

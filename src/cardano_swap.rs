@@ -22,7 +22,13 @@ pub(crate) async fn request_swap(
 	amount_cbtc: i64,
 	cardano_address: &str,
 ) -> Result<(i64, String, String), String> {
-	let owner_pkh = address_to_pkh(cardano_address)?;
+	// Validate address and check network matches operator (testnet vs mainnet)
+	let expected_prefix = if operator.operator_address().starts_with("addr_test") {
+		Some("addr_test")
+	} else {
+		Some("addr")
+	};
+	let owner_pkh = validate_address(cardano_address, expected_prefix)?;
 
 	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + 3_600_000;
@@ -146,7 +152,16 @@ pub(crate) fn extract_swap_address(description: &str) -> Option<String> {
 }
 
 /// Derive payment key hash from a bech32 Cardano address.
+/// Validate a Cardano address and extract the payment key hash.
+///
+/// Accepts `addr_test1...` (testnet/preprod) and `addr1...` (mainnet).
+/// Optionally validates the network prefix matches the expected network.
 pub(crate) fn address_to_pkh(address: &str) -> Result<String, String> {
+	validate_address(address, None)
+}
+
+/// Validate a Cardano address, check network prefix, and extract PKH.
+pub(crate) fn validate_address(address: &str, expected_prefix: Option<&str>) -> Result<String, String> {
 	use bech32::FromBase32;
 	// Shelley addresses: 1-byte header + 28-byte PKH + 28-byte stake part
 	let (hrp, data5, _variant) = bech32::decode(address)
@@ -156,11 +171,29 @@ pub(crate) fn address_to_pkh(address: &str) -> Result<String, String> {
 		return Err(format!("not a Cardano address (hrp: {})", hrp));
 	}
 
+	// Network validation: addr_test for testnet/preprod, addr for mainnet
+	if let Some(prefix) = expected_prefix {
+		if !hrp.starts_with(prefix) {
+			return Err(format!(
+				"address network mismatch: expected {} prefix, got {}",
+				prefix, hrp,
+			));
+		}
+	}
+
 	let data = Vec::<u8>::from_base32(&data5)
 		.map_err(|e| format!("bech32 base32 decode failed: {:?}", e))?;
 
 	if data.len() < 29 {
 		return Err(format!("address too short: {} bytes", data.len()));
+	}
+
+	// Full Shelley address should be 57 bytes (1 header + 28 PKH + 28 stake)
+	if data.len() != 57 && data.len() != 29 {
+		return Err(format!(
+			"unexpected address length: {} bytes (expected 29 for enterprise or 57 for base address)",
+			data.len(),
+		));
 	}
 
 	// Bytes 1..29 are the payment key hash
