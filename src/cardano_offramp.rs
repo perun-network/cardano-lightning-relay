@@ -35,6 +35,14 @@ pub(crate) async fn request_offramp(
 
 	let payment_hash = format!("{}", invoice.payment_hash());
 
+	// Reject reuse of the same BOLT11 invoice (same payment_hash)
+	if let Some(existing) = swap_db.get_offramp_by_payment_hash(&payment_hash) {
+		return Err(format!(
+			"BOLT11 invoice already used in offramp #{} (status: {:?})",
+			existing.offramp_id, existing.status,
+		));
+	}
+
 	// Validate amount matches (1:1 cBTC = msat for now)
 	if let Some(inv_amt) = invoice.amount_milli_satoshis() {
 		if inv_amt != amount_cbtc as u64 {
@@ -102,6 +110,16 @@ pub(crate) async fn process_offramp_deposit(
 ) -> Result<(), String> {
 	let mapping = swap_db.get_offramp_by_id(offramp_id)
 		.ok_or_else(|| format!("offramp {} not found", offramp_id))?;
+
+	// Reject reuse of a cBTC TX hash already claimed by another offramp
+	if let Some(existing) = swap_db.get_offramp_by_cbtc_tx(cbtc_tx_hash) {
+		if existing.offramp_id != offramp_id {
+			return Err(format!(
+				"cBTC TX {} already used by offramp #{}",
+				cbtc_tx_hash, existing.offramp_id,
+			));
+		}
+	}
 
 	// Atomic status transition: only proceed if still AwaitingDeposit (prevents double-fulfillment)
 	if !swap_db.transition_offramp_status(

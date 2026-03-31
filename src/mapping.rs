@@ -207,6 +207,19 @@ impl SwapDb {
 		).ok()
 	}
 
+	/// Check if a cBTC TX hash has already been used for any offramp deposit.
+	pub fn get_offramp_by_cbtc_tx(&self, cbtc_tx_hash: &str) -> Option<OfframpMapping> {
+		let conn = self.conn.lock().unwrap();
+		conn.query_row(
+			"SELECT offramp_id, bolt11, payment_hash, amount_cbtc, cbtc_tx_hash, status, created_at,
+			        lightning_preimage, deposit_tx_hash, error_message, cardano_offramp_tx_hash,
+			        refund_address, expires_at
+			 FROM offramp_mappings WHERE cbtc_tx_hash = ?1 AND cbtc_tx_hash != ''",
+			params![cbtc_tx_hash],
+			|row| Ok(row_to_offramp(row)),
+		).ok()
+	}
+
 	pub fn update_offramp_status(
 		&self, offramp_id: i64, status: OfframpStatus,
 		preimage: Option<&str>, deposit_tx_hash: Option<&str>, error_message: Option<&str>,
@@ -668,6 +681,32 @@ mod tests {
 		db.update_offramp_cbtc_tx(1, "cbtc_tx_hash_xyz");
 		let got = db.get_offramp_by_id(1).unwrap();
 		assert_eq!(got.cbtc_tx_hash, "cbtc_tx_hash_xyz");
+	}
+
+	#[test]
+	fn get_offramp_by_cbtc_tx_finds_match() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off_tx_reuse"));
+		db.update_offramp_cbtc_tx(1, "cbtc_tx_abc123");
+
+		let got = db.get_offramp_by_cbtc_tx("cbtc_tx_abc123");
+		assert!(got.is_some());
+		assert_eq!(got.unwrap().offramp_id, 1);
+	}
+
+	#[test]
+	fn get_offramp_by_cbtc_tx_ignores_empty() {
+		let db = test_db();
+		// Default cbtc_tx_hash is "" — should not match
+		db.insert_offramp(&make_offramp(1, "off_empty"));
+		assert!(db.get_offramp_by_cbtc_tx("").is_none());
+	}
+
+	#[test]
+	fn get_offramp_by_cbtc_tx_returns_none_for_unknown() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off_unknown"));
+		assert!(db.get_offramp_by_cbtc_tx("nonexistent_tx").is_none());
 	}
 
 	#[test]
