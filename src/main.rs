@@ -700,6 +700,14 @@ async fn start_ldk() {
 			println!("WARNING: No CARDANO_API_AUTH_TOKEN set — /pool/deposit and /pool/withdraw are UNPROTECTED");
 			println!("WARNING: Set CARDANO_API_AUTH_TOKEN to require bearer token authentication");
 		}
+		let max_active_swaps: i64 = std::env::var("CARDANO_MAX_ACTIVE_SWAPS")
+			.unwrap_or_else(|_| "50".into())
+			.parse()
+			.expect("CARDANO_MAX_ACTIVE_SWAPS must be a number");
+		let max_active_offramps: i64 = std::env::var("CARDANO_MAX_ACTIVE_OFFRAMPS")
+			.unwrap_or_else(|_| "50".into())
+			.parse()
+			.expect("CARDANO_MAX_ACTIVE_OFFRAMPS must be a number");
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),
 			swap_db: Arc::clone(db),
@@ -711,6 +719,8 @@ async fn start_ldk() {
 			rate_limiter: Arc::new(std::sync::Mutex::new(
 				api::RateLimiter::new(10, 60), // 10 requests per minute per IP
 			)),
+			max_active_swaps,
+			max_active_offramps,
 		};
 		let api_port: u16 = std::env::var("CARDANO_API_PORT")
 			.unwrap_or_else(|_| "3000".into())

@@ -334,6 +334,26 @@ impl SwapDb {
 		.collect()
 	}
 
+	/// Count active (non-terminal) swaps: Pending or Fulfilling.
+	pub fn count_active_swaps(&self) -> i64 {
+		let conn = self.conn.lock().unwrap();
+		conn.query_row(
+			"SELECT COUNT(*) FROM swap_mappings WHERE status IN ('pending', 'fulfilling')",
+			[],
+			|row| row.get(0),
+		).unwrap_or(0)
+	}
+
+	/// Count active (non-terminal) offramps: AwaitingDeposit, PendingVerification, PayingLightning, or DepositingToPool.
+	pub fn count_active_offramps(&self) -> i64 {
+		let conn = self.conn.lock().unwrap();
+		conn.query_row(
+			"SELECT COUNT(*) FROM offramp_mappings WHERE status IN ('awaiting_deposit', 'pending_verification', 'paying_lightning', 'depositing_to_pool')",
+			[],
+			|row| row.get(0),
+		).unwrap_or(0)
+	}
+
 	/// Get swaps stuck in a given status (for crash recovery).
 	pub fn get_by_status(&self, status: SwapStatus) -> Vec<SwapMapping> {
 		let conn = self.conn.lock().unwrap();
@@ -707,6 +727,30 @@ mod tests {
 		let db = test_db();
 		db.insert_offramp(&make_offramp(1, "off_unknown"));
 		assert!(db.get_offramp_by_cbtc_tx("nonexistent_tx").is_none());
+	}
+
+	#[test]
+	fn count_active_swaps_counts_pending_and_fulfilling() {
+		let db = test_db();
+		db.insert(&make_swap("s1", 9_999_999));
+		db.insert(&make_swap("s2", 9_999_999));
+		db.insert(&make_swap("s3", 9_999_999));
+		db.update_status("s2", SwapStatus::Fulfilling, None);
+		db.update_status("s3", SwapStatus::Completed, None);
+		// s1=Pending, s2=Fulfilling, s3=Completed → 2 active
+		assert_eq!(db.count_active_swaps(), 2);
+	}
+
+	#[test]
+	fn count_active_offramps_counts_non_terminal() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "o1"));
+		db.insert_offramp(&make_offramp(2, "o2"));
+		db.insert_offramp(&make_offramp(3, "o3"));
+		db.update_offramp_status(2, OfframpStatus::PayingLightning, None, None, None);
+		db.update_offramp_status(3, OfframpStatus::Completed, None, None, None);
+		// o1=AwaitingDeposit, o2=PayingLightning, o3=Completed → 2 active
+		assert_eq!(db.count_active_offramps(), 2);
 	}
 
 	#[test]
