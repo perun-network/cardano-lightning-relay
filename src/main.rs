@@ -696,6 +696,9 @@ async fn start_ldk() {
 		let auth_token = std::env::var("CARDANO_API_AUTH_TOKEN").ok();
 		if auth_token.is_some() {
 			println!("API operator auth enabled (bearer token required for pool deposit/withdraw)");
+		} else {
+			println!("WARNING: No CARDANO_API_AUTH_TOKEN set — /pool/deposit and /pool/withdraw are UNPROTECTED");
+			println!("WARNING: Set CARDANO_API_AUTH_TOKEN to require bearer token authentication");
 		}
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),

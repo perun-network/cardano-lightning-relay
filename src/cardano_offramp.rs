@@ -154,11 +154,16 @@ pub(crate) async fn process_offramp_deposit(
 		));
 	}
 
-	// Store verified TX hash and transition to PayingLightning
+	// Store verified TX hash and atomically transition to PayingLightning
 	swap_db.update_offramp_cbtc_tx(offramp_id, cbtc_tx_hash);
-	swap_db.update_offramp_status(
-		offramp_id, OfframpStatus::PayingLightning, None, None, None,
-	);
+	if !swap_db.transition_offramp_status(
+		offramp_id, OfframpStatus::PendingVerification, OfframpStatus::PayingLightning,
+	) {
+		return Err(format!(
+			"offramp {} status changed during verification (concurrent request)",
+			offramp_id,
+		));
+	}
 
 	println!("Offramp #{}: paying Lightning invoice (hash: {})", offramp_id, mapping.payment_hash);
 
@@ -189,14 +194,18 @@ pub(crate) async fn complete_offramp(
 		None => return,
 	};
 
-	if mapping.status != OfframpStatus::PayingLightning {
+	// Atomic transition: only proceed if still PayingLightning (prevents race with recovery)
+	if !swap_db.transition_offramp_status(
+		mapping.offramp_id, OfframpStatus::PayingLightning, OfframpStatus::DepositingToPool,
+	) {
 		println!(
-			"Offramp #{} already in status {:?}, skipping",
-			mapping.offramp_id, mapping.status,
+			"Offramp #{} not in PayingLightning status, skipping (recovery or concurrent handler)",
+			mapping.offramp_id,
 		);
 		return;
 	}
 
+	// Store preimage (safe — we now own this offramp via the transition above)
 	swap_db.update_offramp_status(
 		mapping.offramp_id,
 		OfframpStatus::DepositingToPool,
