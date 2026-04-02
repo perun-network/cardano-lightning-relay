@@ -14,7 +14,7 @@ use crate::helpers::{current_timestamp_ms, query_state_with_retry};
 use crate::mapping::{OfframpMapping, OfframpStatus, SwapDb};
 use crate::types::{ChannelManager, OutboundPaymentInfoStorage};
 use cardano_lightning_client::OperatorAgent;
-use lightning_invoice::Bolt11Invoice;
+use lightning_invoice::{Bolt11Invoice, Currency};
 use lightning_persister::fs_store::FilesystemStore;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -40,6 +40,21 @@ pub(crate) async fn request_offramp(
 		return Err(format!(
 			"BOLT11 invoice already used in offramp #{} (status: {:?})",
 			existing.offramp_id, existing.status,
+		));
+	}
+
+	// Validate invoice network matches relay (testnet relay = regtest/testnet/signet, mainnet = mainnet)
+	let is_testnet_relay = operator.operator_address().starts_with("addr_test");
+	let invoice_currency = invoice.currency();
+	let network_ok = match invoice_currency {
+		Currency::Bitcoin => !is_testnet_relay,
+		Currency::BitcoinTestnet | Currency::Regtest | Currency::Signet => is_testnet_relay,
+		_ => false,
+	};
+	if !network_ok {
+		return Err(format!(
+			"BOLT11 invoice network ({:?}) does not match relay network (testnet={})",
+			invoice_currency, is_testnet_relay,
 		));
 	}
 
