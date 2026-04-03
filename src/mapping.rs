@@ -207,6 +207,19 @@ impl SwapDb {
 		).ok()
 	}
 
+	/// Check if a cBTC TX hash has already been used for any offramp deposit.
+	pub fn get_offramp_by_cbtc_tx(&self, cbtc_tx_hash: &str) -> Option<OfframpMapping> {
+		let conn = self.conn.lock().unwrap();
+		conn.query_row(
+			"SELECT offramp_id, bolt11, payment_hash, amount_cbtc, cbtc_tx_hash, status, created_at,
+			        lightning_preimage, deposit_tx_hash, error_message, cardano_offramp_tx_hash,
+			        refund_address, expires_at
+			 FROM offramp_mappings WHERE cbtc_tx_hash = ?1 AND cbtc_tx_hash != ''",
+			params![cbtc_tx_hash],
+			|row| Ok(row_to_offramp(row)),
+		).ok()
+	}
+
 	pub fn update_offramp_status(
 		&self, offramp_id: i64, status: OfframpStatus,
 		preimage: Option<&str>, deposit_tx_hash: Option<&str>, error_message: Option<&str>,
@@ -319,6 +332,26 @@ impl SwapDb {
 		}).expect("failed to query offramp counts")
 		.filter_map(|r| r.ok())
 		.collect()
+	}
+
+	/// Count active (non-terminal) swaps: Pending or Fulfilling.
+	pub fn count_active_swaps(&self) -> i64 {
+		let conn = self.conn.lock().unwrap();
+		conn.query_row(
+			"SELECT COUNT(*) FROM swap_mappings WHERE status IN ('pending', 'fulfilling')",
+			[],
+			|row| row.get(0),
+		).unwrap_or(0)
+	}
+
+	/// Count active (non-terminal) offramps: AwaitingDeposit, PendingVerification, PayingLightning, or DepositingToPool.
+	pub fn count_active_offramps(&self) -> i64 {
+		let conn = self.conn.lock().unwrap();
+		conn.query_row(
+			"SELECT COUNT(*) FROM offramp_mappings WHERE status IN ('awaiting_deposit', 'pending_verification', 'paying_lightning', 'depositing_to_pool')",
+			[],
+			|row| row.get(0),
+		).unwrap_or(0)
 	}
 
 	/// Get swaps stuck in a given status (for crash recovery).
@@ -668,6 +701,56 @@ mod tests {
 		db.update_offramp_cbtc_tx(1, "cbtc_tx_hash_xyz");
 		let got = db.get_offramp_by_id(1).unwrap();
 		assert_eq!(got.cbtc_tx_hash, "cbtc_tx_hash_xyz");
+	}
+
+	#[test]
+	fn get_offramp_by_cbtc_tx_finds_match() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off_tx_reuse"));
+		db.update_offramp_cbtc_tx(1, "cbtc_tx_abc123");
+
+		let got = db.get_offramp_by_cbtc_tx("cbtc_tx_abc123");
+		assert!(got.is_some());
+		assert_eq!(got.unwrap().offramp_id, 1);
+	}
+
+	#[test]
+	fn get_offramp_by_cbtc_tx_ignores_empty() {
+		let db = test_db();
+		// Default cbtc_tx_hash is "" — should not match
+		db.insert_offramp(&make_offramp(1, "off_empty"));
+		assert!(db.get_offramp_by_cbtc_tx("").is_none());
+	}
+
+	#[test]
+	fn get_offramp_by_cbtc_tx_returns_none_for_unknown() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "off_unknown"));
+		assert!(db.get_offramp_by_cbtc_tx("nonexistent_tx").is_none());
+	}
+
+	#[test]
+	fn count_active_swaps_counts_pending_and_fulfilling() {
+		let db = test_db();
+		db.insert(&make_swap("s1", 9_999_999));
+		db.insert(&make_swap("s2", 9_999_999));
+		db.insert(&make_swap("s3", 9_999_999));
+		db.update_status("s2", SwapStatus::Fulfilling, None);
+		db.update_status("s3", SwapStatus::Completed, None);
+		// s1=Pending, s2=Fulfilling, s3=Completed → 2 active
+		assert_eq!(db.count_active_swaps(), 2);
+	}
+
+	#[test]
+	fn count_active_offramps_counts_non_terminal() {
+		let db = test_db();
+		db.insert_offramp(&make_offramp(1, "o1"));
+		db.insert_offramp(&make_offramp(2, "o2"));
+		db.insert_offramp(&make_offramp(3, "o3"));
+		db.update_offramp_status(2, OfframpStatus::PayingLightning, None, None, None);
+		db.update_offramp_status(3, OfframpStatus::Completed, None, None, None);
+		// o1=AwaitingDeposit, o2=PayingLightning, o3=Completed → 2 active
+		assert_eq!(db.count_active_offramps(), 2);
 	}
 
 	#[test]

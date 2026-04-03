@@ -40,6 +40,8 @@ pub(crate) struct ApiState {
 	pub fs_store: Arc<FilesystemStore>,
 	pub auth_token: Option<String>,
 	pub rate_limiter: Arc<Mutex<RateLimiter>>,
+	pub max_active_swaps: i64,
+	pub max_active_offramps: i64,
 }
 
 /// Simple in-memory rate limiter: max requests per IP per window.
@@ -264,6 +266,15 @@ async fn handle_swap_request(
 			Json(ErrorResponse { error: "amount must be between 1 and 10,000,000,000 cBTC".into() })));
 	}
 
+	// Reject if too many active swaps (prevents pool liquidity lockup via spam)
+	let active_swaps = state.swap_db.count_active_swaps();
+	if active_swaps >= state.max_active_swaps {
+		return Err((StatusCode::SERVICE_UNAVAILABLE,
+			Json(ErrorResponse { error: format!(
+				"too many active swaps ({}), try again later", active_swaps,
+			)})));
+	}
+
 	// Liquidity pre-check
 	if let Ok(pool_state) = state.operator.agent().query_state().await {
 		if req.amount_cbtc > pool_state.available() {
@@ -448,6 +459,15 @@ async fn handle_offramp_request(
 	if req.amount_cbtc <= 0 || req.amount_cbtc > 10_000_000_000 {
 		return Err((StatusCode::BAD_REQUEST,
 			Json(ErrorResponse { error: "amount must be between 1 and 10,000,000,000 cBTC".into() })));
+	}
+
+	// Reject if too many active offramps (prevents operator ADA drain via spam)
+	let active_offramps = state.swap_db.count_active_offramps();
+	if active_offramps >= state.max_active_offramps {
+		return Err((StatusCode::SERVICE_UNAVAILABLE,
+			Json(ErrorResponse { error: format!(
+				"too many active offramps ({}), try again later", active_offramps,
+			)})));
 	}
 
 	let (offramp_id, operator_address, payment_hash) = cardano_offramp::request_offramp(

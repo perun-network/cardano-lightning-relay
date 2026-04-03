@@ -14,7 +14,7 @@ use crate::helpers::{current_timestamp_ms, query_state_with_retry};
 use crate::mapping::{OfframpMapping, OfframpStatus, SwapDb};
 use crate::types::{ChannelManager, OutboundPaymentInfoStorage};
 use cardano_lightning_client::OperatorAgent;
-use lightning_invoice::Bolt11Invoice;
+use lightning_invoice::{Bolt11Invoice, Currency};
 use lightning_persister::fs_store::FilesystemStore;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -34,6 +34,29 @@ pub(crate) async fn request_offramp(
 		.map_err(|e| format!("invalid BOLT11 invoice: {:?}", e))?;
 
 	let payment_hash = format!("{}", invoice.payment_hash());
+
+	// Reject reuse of the same BOLT11 invoice (same payment_hash)
+	if let Some(existing) = swap_db.get_offramp_by_payment_hash(&payment_hash) {
+		return Err(format!(
+			"BOLT11 invoice already used in offramp #{} (status: {:?})",
+			existing.offramp_id, existing.status,
+		));
+	}
+
+	// Validate invoice network matches relay (testnet relay = regtest/testnet/signet, mainnet = mainnet)
+	let is_testnet_relay = operator.operator_address().starts_with("addr_test");
+	let invoice_currency = invoice.currency();
+	let network_ok = match invoice_currency {
+		Currency::Bitcoin => !is_testnet_relay,
+		Currency::BitcoinTestnet | Currency::Regtest | Currency::Signet => is_testnet_relay,
+		_ => false,
+	};
+	if !network_ok {
+		return Err(format!(
+			"BOLT11 invoice network ({:?}) does not match relay network (testnet={})",
+			invoice_currency, is_testnet_relay,
+		));
+	}
 
 	// Validate amount matches (1:1 cBTC = msat for now)
 	if let Some(inv_amt) = invoice.amount_milli_satoshis() {
@@ -103,6 +126,16 @@ pub(crate) async fn process_offramp_deposit(
 	let mapping = swap_db.get_offramp_by_id(offramp_id)
 		.ok_or_else(|| format!("offramp {} not found", offramp_id))?;
 
+	// Reject reuse of a cBTC TX hash already claimed by another offramp
+	if let Some(existing) = swap_db.get_offramp_by_cbtc_tx(cbtc_tx_hash) {
+		if existing.offramp_id != offramp_id {
+			return Err(format!(
+				"cBTC TX {} already used by offramp #{}",
+				cbtc_tx_hash, existing.offramp_id,
+			));
+		}
+	}
+
 	// Atomic status transition: only proceed if still AwaitingDeposit (prevents double-fulfillment)
 	if !swap_db.transition_offramp_status(
 		offramp_id, OfframpStatus::AwaitingDeposit, OfframpStatus::PendingVerification,
@@ -136,11 +169,16 @@ pub(crate) async fn process_offramp_deposit(
 		));
 	}
 
-	// Store verified TX hash and transition to PayingLightning
+	// Store verified TX hash and atomically transition to PayingLightning
 	swap_db.update_offramp_cbtc_tx(offramp_id, cbtc_tx_hash);
-	swap_db.update_offramp_status(
-		offramp_id, OfframpStatus::PayingLightning, None, None, None,
-	);
+	if !swap_db.transition_offramp_status(
+		offramp_id, OfframpStatus::PendingVerification, OfframpStatus::PayingLightning,
+	) {
+		return Err(format!(
+			"offramp {} status changed during verification (concurrent request)",
+			offramp_id,
+		));
+	}
 
 	println!("Offramp #{}: paying Lightning invoice (hash: {})", offramp_id, mapping.payment_hash);
 
@@ -171,14 +209,18 @@ pub(crate) async fn complete_offramp(
 		None => return,
 	};
 
-	if mapping.status != OfframpStatus::PayingLightning {
+	// Atomic transition: only proceed if still PayingLightning (prevents race with recovery)
+	if !swap_db.transition_offramp_status(
+		mapping.offramp_id, OfframpStatus::PayingLightning, OfframpStatus::DepositingToPool,
+	) {
 		println!(
-			"Offramp #{} already in status {:?}, skipping",
-			mapping.offramp_id, mapping.status,
+			"Offramp #{} not in PayingLightning status, skipping (recovery or concurrent handler)",
+			mapping.offramp_id,
 		);
 		return;
 	}
 
+	// Store preimage (safe — we now own this offramp via the transition above)
 	swap_db.update_offramp_status(
 		mapping.offramp_id,
 		OfframpStatus::DepositingToPool,

@@ -88,12 +88,20 @@ pub(crate) async fn recover_depositing_offramps(
 	if !paying.is_empty() {
 		println!("Recovery: found {} offramp(s) stuck in PayingLightning", paying.len());
 		for mapping in &paying {
-			println!("Recovery: offramp #{} stuck in PayingLightning, marking failed for expiry recovery",
-				mapping.offramp_id);
-			swap_db.update_offramp_status(
-				mapping.offramp_id, OfframpStatus::Failed, None, None,
-				Some("relay crashed during Lightning payment, awaiting expiry for on-chain cancel"),
-			);
+			// Atomic transition: skip if an event handler already moved this offramp
+			if swap_db.transition_offramp_status(
+				mapping.offramp_id, OfframpStatus::PayingLightning, OfframpStatus::Failed,
+			) {
+				println!("Recovery: offramp #{} stuck in PayingLightning, marked failed for expiry recovery",
+					mapping.offramp_id);
+				swap_db.update_offramp_status(
+					mapping.offramp_id, OfframpStatus::Failed, None, None,
+					Some("relay crashed during Lightning payment, awaiting expiry for on-chain cancel"),
+				);
+			} else {
+				println!("Recovery: offramp #{} already moved from PayingLightning, skipping",
+					mapping.offramp_id);
+			}
 		}
 	}
 
