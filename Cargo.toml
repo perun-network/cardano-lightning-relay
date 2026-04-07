@@ -32,7 +32,7 @@ bech32 = "0.8"
 libc = "0.2"
 
 axum = "0.8"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors", "limit"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rand = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
