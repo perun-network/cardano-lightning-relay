@@ -4,10 +4,9 @@
 //! payment but before submitting the Cardano TX), swaps can get stuck. This module
 //! scans for stuck entries and retries them.
 
+use crate::cardano_ops::CardanoOperator;
 use crate::helpers::query_state_with_retry;
 use crate::mapping::{OfframpStatus, SwapDb, SwapStatus};
-use cardano_lightning_client::OperatorAgent;
-use std::sync::Arc;
 
 /// Recover swaps stuck in Fulfilling status.
 ///
@@ -15,7 +14,7 @@ use std::sync::Arc;
 /// submitted (or never confirmed). We query on-chain state: if the invoice is already
 /// fulfilled, just update the DB. Otherwise, retry the TX.
 pub(crate) async fn recover_fulfilling_swaps(
-	operator: &OperatorAgent, swap_db: &SwapDb,
+	operator: &impl CardanoOperator, swap_db: &SwapDb,
 ) {
 	let stuck = swap_db.get_by_status(SwapStatus::Fulfilling);
 	if stuck.is_empty() {
@@ -71,17 +70,33 @@ pub(crate) async fn recover_fulfilling_swaps(
 	}
 }
 
-/// Recover offramps stuck in PayingLightning or DepositingToPool status.
+/// Recover offramps stuck in PendingVerification, PayingLightning, or DepositingToPool.
 ///
-/// PayingLightning: Lightning payment may or may not have been sent. Check on-chain
-/// state — if offramp still exists, it was not yet fulfilled. Mark as failed so the
-/// background expiry monitor can cancel it.
+/// PendingVerification: Relay crashed during cBTC verification. Reset to AwaitingDeposit
+/// so the user can retry the deposit notification.
+///
+/// PayingLightning: Lightning payment may or may not have been sent. Mark as failed
+/// so the background expiry monitor can cancel it on-chain.
 ///
 /// DepositingToPool: Lightning payment was sent but FulfillOfframp TX was never submitted.
 /// Query on-chain state and retry.
 pub(crate) async fn recover_depositing_offramps(
-	operator: &OperatorAgent, swap_db: &SwapDb,
+	operator: &impl CardanoOperator, swap_db: &SwapDb,
 ) {
+	// Recover PendingVerification — reset to AwaitingDeposit so user can retry
+	let verifying = swap_db.get_offramps_by_status(OfframpStatus::PendingVerification);
+	if !verifying.is_empty() {
+		println!("Recovery: found {} offramp(s) stuck in PendingVerification", verifying.len());
+		for mapping in &verifying {
+			if swap_db.transition_offramp_status(
+				mapping.offramp_id, OfframpStatus::PendingVerification, OfframpStatus::AwaitingDeposit,
+			) {
+				println!("Recovery: offramp #{} reset to AwaitingDeposit (was stuck in PendingVerification)",
+					mapping.offramp_id);
+			}
+		}
+	}
+
 	// Recover PayingLightning — we can't retry the Lightning payment on startup
 	// (no invoice state preserved), so mark as failed for expiry handling.
 	let paying = swap_db.get_offramps_by_status(OfframpStatus::PayingLightning);

@@ -21,6 +21,7 @@ pub(crate) async fn request_swap(
 	operator: &impl CardanoOperator,
 	amount_cbtc: i64,
 	cardano_address: &str,
+	expiry_ms: i64,
 ) -> Result<(i64, String, String), String> {
 	// Validate address and check network matches operator (testnet vs mainnet)
 	let expected_prefix = if operator.operator_address().starts_with("addr_test") {
@@ -31,7 +32,7 @@ pub(crate) async fn request_swap(
 	let owner_pkh = validate_address(cardano_address, expected_prefix)?;
 
 	let now_ms = current_timestamp_ms();
-	let expires_at = now_ms + 3_600_000;
+	let expires_at = now_ms + expiry_ms;
 
 	// Create LM invoice on Cardano
 	let (invoice_id, signed_tx) = operator

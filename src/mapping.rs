@@ -65,7 +65,8 @@ pub(crate) struct SwapDb {
 impl SwapDb {
 	pub fn open(path: &str) -> Self {
 		let conn = Connection::open(path).expect("failed to open swap database");
-		conn.execute_batch("PRAGMA journal_mode=WAL;").expect("failed to enable WAL mode");
+		conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")
+			.expect("failed to set WAL mode and synchronous=FULL");
 		conn.execute_batch(
 			"CREATE TABLE IF NOT EXISTS swap_mappings (
 				payment_hash   TEXT PRIMARY KEY,
@@ -254,6 +255,21 @@ impl SwapDb {
 			"UPDATE offramp_mappings SET cbtc_tx_hash = ?1 WHERE offramp_id = ?2",
 			params![cbtc_tx_hash, offramp_id],
 		).expect("failed to update offramp cbtc_tx_hash");
+	}
+
+	/// Atomically set cBTC TX hash AND transition status in one SQL statement.
+	/// Returns true if the transition succeeded (status matched expected).
+	pub fn transition_offramp_with_cbtc_tx(
+		&self, offramp_id: i64, cbtc_tx_hash: &str,
+		expected: OfframpStatus, new: OfframpStatus,
+	) -> bool {
+		let conn = self.conn.lock().unwrap();
+		let rows = conn.execute(
+			"UPDATE offramp_mappings SET cbtc_tx_hash = ?1, status = ?2
+			 WHERE offramp_id = ?3 AND status = ?4",
+			params![cbtc_tx_hash, new.as_str(), offramp_id, expected.as_str()],
+		).expect("failed to transition offramp with cbtc_tx");
+		rows > 0
 	}
 
 	/// Get expired offramp mappings (awaiting_deposit or failed, past expires_at).

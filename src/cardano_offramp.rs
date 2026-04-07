@@ -28,6 +28,7 @@ pub(crate) async fn request_offramp(
 	bolt11_str: &str,
 	amount_cbtc: i64,
 	cardano_address: &str,
+	expiry_ms: i64,
 ) -> Result<(i64, String, String), String> {
 	// 1. Parse BOLT11 invoice
 	let invoice = Bolt11Invoice::from_str(bolt11_str)
@@ -71,9 +72,9 @@ pub(crate) async fn request_offramp(
 	// 2. Derive refund_address PKH from cardano_address
 	let refund_pkh = address_to_pkh(cardano_address)?;
 
-	// 3. Set expiry (1 hour from now)
+	// 3. Set expiry
 	let now_ms = current_timestamp_ms();
-	let expires_at = now_ms + 3_600_000;
+	let expires_at = now_ms + expiry_ms;
 
 	// 4. Submit CreateOfframp TX on-chain
 	let (offramp_id, signed_tx) = operator
@@ -169,10 +170,10 @@ pub(crate) async fn process_offramp_deposit(
 		));
 	}
 
-	// Store verified TX hash and atomically transition to PayingLightning
-	swap_db.update_offramp_cbtc_tx(offramp_id, cbtc_tx_hash);
-	if !swap_db.transition_offramp_status(
-		offramp_id, OfframpStatus::PendingVerification, OfframpStatus::PayingLightning,
+	// Atomically store verified TX hash AND transition to PayingLightning
+	if !swap_db.transition_offramp_with_cbtc_tx(
+		offramp_id, cbtc_tx_hash,
+		OfframpStatus::PendingVerification, OfframpStatus::PayingLightning,
 	) {
 		return Err(format!(
 			"offramp {} status changed during verification (concurrent request)",
@@ -368,9 +369,18 @@ pub(crate) async fn cancel_offramp_on_chain(
 				"SUCCESS: Offramp #{} cancelled on-chain, tx: {}",
 				mapping.offramp_id, tx_hash,
 			);
+			// Append cancel info to existing error message (don't overwrite refund reason)
+			let existing = swap_db.get_offramp_by_id(mapping.offramp_id)
+				.and_then(|m| m.error_message)
+				.unwrap_or_default();
+			let msg = if existing.is_empty() {
+				format!("cancelled on-chain: {}", tx_hash)
+			} else {
+				format!("{}; cancelled on-chain: {}", existing, tx_hash)
+			};
 			swap_db.update_offramp_status(
 				mapping.offramp_id, OfframpStatus::Failed, None, None,
-				Some(&format!("cancelled on-chain: {}", tx_hash)),
+				Some(&msg),
 			);
 		},
 		Err(e) => {

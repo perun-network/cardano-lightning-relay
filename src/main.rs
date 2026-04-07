@@ -675,8 +675,8 @@ async fn start_ldk() {
 
 	// Recover stuck swaps/offramps from previous crash
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
-		recovery::recover_fulfilling_swaps(op, db).await;
-		recovery::recover_depositing_offramps(op, db).await;
+		recovery::recover_fulfilling_swaps(op.as_ref(), db).await;
+		recovery::recover_depositing_offramps(op.as_ref(), db).await;
 	}
 
 	// Start expiry monitors for Cardano swaps and offramps
@@ -708,6 +708,15 @@ async fn start_ldk() {
 			.unwrap_or_else(|_| "50".into())
 			.parse()
 			.expect("CARDANO_MAX_ACTIVE_OFFRAMPS must be a number");
+		let swap_expiry_secs: i64 = std::env::var("CARDANO_SWAP_EXPIRY_SECONDS")
+			.unwrap_or_else(|_| "3600".into())
+			.parse()
+			.expect("CARDANO_SWAP_EXPIRY_SECONDS must be a number");
+		assert!(swap_expiry_secs > 0, "CARDANO_SWAP_EXPIRY_SECONDS must be positive (got {})", swap_expiry_secs);
+		let swap_expiry_ms = swap_expiry_secs * 1000;
+		if swap_expiry_secs != 3600 {
+			println!("Swap/offramp expiry set to {} seconds", swap_expiry_secs);
+		}
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),
 			swap_db: Arc::clone(db),
@@ -721,6 +730,7 @@ async fn start_ldk() {
 			)),
 			max_active_swaps,
 			max_active_offramps,
+			swap_expiry_ms,
 		};
 		let api_port: u16 = std::env::var("CARDANO_API_PORT")
 			.unwrap_or_else(|_| "3000".into())
