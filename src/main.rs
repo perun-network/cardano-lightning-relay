@@ -712,6 +712,7 @@ async fn start_ldk() {
 			.unwrap_or_else(|_| "3600".into())
 			.parse()
 			.expect("CARDANO_SWAP_EXPIRY_SECONDS must be a number");
+		assert!(swap_expiry_secs > 0, "CARDANO_SWAP_EXPIRY_SECONDS must be positive (got {})", swap_expiry_secs);
 		let swap_expiry_ms = swap_expiry_secs * 1000;
 		if swap_expiry_secs != 3600 {
 			println!("Swap/offramp expiry set to {} seconds", swap_expiry_secs);

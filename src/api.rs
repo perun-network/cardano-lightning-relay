@@ -301,7 +301,10 @@ async fn handle_swap_request(
 		expiry_ms,
 	)
 	.await
-	.map_err(|e| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e })))?;
+	.map_err(|e| {
+		println!("ERROR: swap request failed: {}", e);
+		(StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e }))
+	})?;
 
 	// 2. Create BOLT11 invoice
 	let (bolt11, payment_hash) = {
@@ -395,19 +398,29 @@ async fn handle_pool_deposit(
 	Json(req): Json<PoolDepositRequest>,
 ) -> Result<Json<PoolDepositResponse>, (StatusCode, Json<ErrorResponse>)> {
 	verify_operator_auth(&headers, &state.auth_token)?;
+	if req.amount <= 0 {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "deposit amount must be positive".into() })));
+	}
 	let signed_tx = state
 		.operator
 		.deposit(req.amount)
 		.await
-		.map_err(|e| (StatusCode::BAD_REQUEST,
-			Json(ErrorResponse { error: format!("deposit failed: {}", e) })))?;
+		.map_err(|e| {
+			println!("ERROR: pool deposit failed: {}", e);
+			(StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "deposit transaction failed".into() }))
+		})?;
 
 	let tx_hash = state
 		.operator
 		.submit_tx(&signed_tx)
 		.await
-		.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR,
-			Json(ErrorResponse { error: format!("submit failed: {}", e) })))?;
+		.map_err(|e| {
+			println!("ERROR: pool deposit submit failed: {}", e);
+			(StatusCode::INTERNAL_SERVER_ERROR,
+			Json(ErrorResponse { error: "deposit submission failed".into() }))
+		})?;
 
 	let new_total = state.operator.agent().query_state().await
 		.ok()
@@ -426,19 +439,29 @@ async fn handle_pool_withdraw(
 	Json(req): Json<PoolWithdrawRequest>,
 ) -> Result<Json<PoolWithdrawResponse>, (StatusCode, Json<ErrorResponse>)> {
 	verify_operator_auth(&headers, &state.auth_token)?;
+	if req.amount <= 0 {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "withdraw amount must be positive".into() })));
+	}
 	let signed_tx = state
 		.operator
 		.withdraw(req.amount)
 		.await
-		.map_err(|e| (StatusCode::BAD_REQUEST,
-			Json(ErrorResponse { error: format!("withdraw failed: {}", e) })))?;
+		.map_err(|e| {
+			println!("ERROR: pool withdraw failed: {}", e);
+			(StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "withdraw transaction failed".into() }))
+		})?;
 
 	let tx_hash = state
 		.operator
 		.submit_tx(&signed_tx)
 		.await
-		.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR,
-			Json(ErrorResponse { error: format!("submit failed: {}", e) })))?;
+		.map_err(|e| {
+			println!("ERROR: pool withdraw submit failed: {}", e);
+			(StatusCode::INTERNAL_SERVER_ERROR,
+			Json(ErrorResponse { error: "withdraw submission failed".into() }))
+		})?;
 
 	let new_total = state.operator.agent().query_state().await
 		.ok()
@@ -487,7 +510,10 @@ async fn handle_offramp_request(
 		state.swap_expiry_ms,
 	)
 	.await
-	.map_err(|e| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e })))?;
+	.map_err(|e| {
+		println!("ERROR: offramp request failed: {}", e);
+		(StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e }))
+	})?;
 
 	Ok(Json(OfframpResponse {
 		offramp_id,
@@ -506,6 +532,10 @@ async fn handle_offramp_deposit(
 		return Err((StatusCode::TOO_MANY_REQUESTS,
 			Json(ErrorResponse { error: "rate limit exceeded, try again later".into() })));
 	}
+	if req.offramp_id <= 0 {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "invalid offramp_id".into() })));
+	}
 	cardano_offramp::process_offramp_deposit(
 		&state.operator,
 		&state.swap_db,
@@ -516,7 +546,10 @@ async fn handle_offramp_deposit(
 		&req.cbtc_tx_hash,
 	)
 	.await
-	.map_err(|e| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e })))?;
+	.map_err(|e| {
+		println!("ERROR: offramp deposit failed: {}", e);
+		(StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e }))
+	})?;
 
 	// Get the updated mapping for response
 	let mapping = state.swap_db.get_offramp_by_id(req.offramp_id)

@@ -170,10 +170,10 @@ pub(crate) async fn process_offramp_deposit(
 		));
 	}
 
-	// Store verified TX hash and atomically transition to PayingLightning
-	swap_db.update_offramp_cbtc_tx(offramp_id, cbtc_tx_hash);
-	if !swap_db.transition_offramp_status(
-		offramp_id, OfframpStatus::PendingVerification, OfframpStatus::PayingLightning,
+	// Atomically store verified TX hash AND transition to PayingLightning
+	if !swap_db.transition_offramp_with_cbtc_tx(
+		offramp_id, cbtc_tx_hash,
+		OfframpStatus::PendingVerification, OfframpStatus::PayingLightning,
 	) {
 		return Err(format!(
 			"offramp {} status changed during verification (concurrent request)",
