@@ -17,7 +17,7 @@ cardano-lightning-client = { path = "../cardano-lightning-client" }
 lightning = { version = "0.2.0", features = ["dnssec"] }
 lightning-block-sync = { version = "0.2.0", features = [ "rpc-client", "tokio" ] }
 lightning-dns-resolver = { version = "0.3.0" }
-lightning-invoice = { version = "0.34.0" }
+lightning-invoice = { version = "0.34.0", features = ["std"] }
 lightning-net-tokio = { version = "0.2.0" }
 lightning-persister = { version = "0.2.0", features = [ "tokio" ] }
 lightning-background-processor = { version = "0.2.0" }

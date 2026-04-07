@@ -42,6 +42,8 @@ pub(crate) struct ApiState {
 	pub rate_limiter: Arc<Mutex<RateLimiter>>,
 	pub max_active_swaps: i64,
 	pub max_active_offramps: i64,
+	/// Swap/offramp expiry in milliseconds (default: 3_600_000 = 1 hour).
+	pub swap_expiry_ms: i64,
 }
 
 /// Simple in-memory rate limiter: max requests per IP per window.
@@ -142,6 +144,8 @@ pub(crate) struct PoolInfoResponse {
 	pub reserved: i64,
 	pub available: i64,
 	pub active_invoices: usize,
+	/// Active swaps tracked by the relay DB (may be ahead of on-chain state).
+	pub pending_swaps: i64,
 }
 
 #[derive(Serialize)]
@@ -286,17 +290,20 @@ async fn handle_swap_request(
 		}
 	}
 
+	let expiry_ms = state.swap_expiry_ms;
+	let expiry_secs = (expiry_ms / 1000) as u32;
+
 	// 1. Create LM invoice on Cardano
 	let (invoice_id, description, create_tx_hash) = cardano_swap::request_swap(
 		&*state.operator,
 		req.amount_cbtc,
 		&req.cardano_address,
+		expiry_ms,
 	)
 	.await
 	.map_err(|e| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e })))?;
 
 	// 2. Create BOLT11 invoice
-	// Use 1 hour expiry (3600 seconds)
 	let (bolt11, payment_hash) = {
 		let mut inbound = state.inbound_payments.lock().unwrap();
 		let result = payment_cmds::create_invoice_for_swap(
@@ -304,7 +311,7 @@ async fn handle_swap_request(
 			&description,
 			&mut inbound,
 			&state.channel_manager,
-			3600,
+			expiry_secs,
 		);
 		match result {
 			Some((bolt11, hash)) => (bolt11, hash),
@@ -323,7 +330,7 @@ async fn handle_swap_request(
 		invoice_id,
 		req.amount_cbtc,
 		&req.cardano_address,
-		current_timestamp_ms() + 3_600_000,
+		current_timestamp_ms() + expiry_ms,
 		&create_tx_hash,
 	);
 
@@ -374,6 +381,7 @@ async fn handle_pool_info(
 			reserved: s.reserved,
 			available: s.available(),
 			active_invoices: s.invoices.len(),
+			pending_swaps: state.swap_db.count_active_swaps(),
 		})),
 		Err(e) => Err(Json(ErrorResponse {
 			error: format!("failed to query pool: {}", e),
@@ -476,6 +484,7 @@ async fn handle_offramp_request(
 		&req.bolt11,
 		req.amount_cbtc,
 		&req.cardano_address,
+		state.swap_expiry_ms,
 	)
 	.await
 	.map_err(|e| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: e })))?;
@@ -580,24 +589,154 @@ async fn handle_metrics(
 	let swap_counts = state.swap_db.get_swap_counts();
 	let offramp_counts = state.swap_db.get_offramp_counts();
 
-	fn to_status_counts(counts: &[(String, i64)]) -> StatusCounts {
-		let mut completed = 0;
-		let mut pending = 0;
-		let mut failed = 0;
-		let mut total = 0;
-		for (status, count) in counts {
-			total += count;
-			match status.as_str() {
-				"completed" => completed += count,
-				"failed" | "expired" => failed += count,
-				_ => pending += count,
-			}
-		}
-		StatusCounts { completed, pending, failed, total }
-	}
-
 	Json(MetricsResponse {
 		onramp: to_status_counts(&swap_counts),
 		offramp: to_status_counts(&offramp_counts),
 	})
+}
+
+fn to_status_counts(counts: &[(String, i64)]) -> StatusCounts {
+	let mut completed = 0;
+	let mut pending = 0;
+	let mut failed = 0;
+	let mut total = 0;
+	for (status, count) in counts {
+		total += count;
+		match status.as_str() {
+			"completed" => completed += count,
+			"failed" | "expired" => failed += count,
+			_ => pending += count,
+		}
+	}
+	StatusCounts { completed, pending, failed, total }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use axum::http::HeaderValue;
+
+	// ─── RateLimiter tests ──────────────────────────────────────────────────
+
+	#[test]
+	fn rate_limiter_allows_up_to_max() {
+		let mut limiter = RateLimiter::new(3, 60);
+		let ip: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+
+		assert!(limiter.check(ip));
+		assert!(limiter.check(ip));
+		assert!(limiter.check(ip));
+		assert!(!limiter.check(ip)); // 4th request blocked
+	}
+
+	#[test]
+	fn rate_limiter_isolates_ips() {
+		let mut limiter = RateLimiter::new(1, 60);
+		let ip1: std::net::IpAddr = "10.0.0.1".parse().unwrap();
+		let ip2: std::net::IpAddr = "10.0.0.2".parse().unwrap();
+
+		assert!(limiter.check(ip1));
+		assert!(!limiter.check(ip1)); // ip1 blocked
+		assert!(limiter.check(ip2));  // ip2 still allowed
+	}
+
+	#[test]
+	fn rate_limiter_resets_after_window() {
+		let mut limiter = RateLimiter::new(1, 0); // 0-second window
+		let ip: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+
+		assert!(limiter.check(ip));
+		// Window is 0 seconds, so next check should see expired window
+		std::thread::sleep(std::time::Duration::from_millis(5));
+		assert!(limiter.check(ip)); // allowed again after window expires
+	}
+
+	// ─── Auth tests ─────────────────────────────────────────────────────────
+
+	fn make_headers(auth: Option<&str>) -> HeaderMap {
+		let mut headers = HeaderMap::new();
+		if let Some(val) = auth {
+			headers.insert("authorization", HeaderValue::from_str(val).unwrap());
+		}
+		headers
+	}
+
+	#[test]
+	fn auth_disabled_when_no_token_configured() {
+		let headers = make_headers(None);
+		assert!(verify_operator_auth(&headers, &None).is_ok());
+	}
+
+	#[test]
+	fn auth_succeeds_with_correct_token() {
+		let token = Some("secret123".to_string());
+		let headers = make_headers(Some("Bearer secret123"));
+		assert!(verify_operator_auth(&headers, &token).is_ok());
+	}
+
+	#[test]
+	fn auth_fails_with_wrong_token() {
+		let token = Some("secret123".to_string());
+		let headers = make_headers(Some("Bearer wrong_token"));
+		let result = verify_operator_auth(&headers, &token);
+		assert!(result.is_err());
+		let (status, _) = result.unwrap_err();
+		assert_eq!(status, StatusCode::UNAUTHORIZED);
+	}
+
+	#[test]
+	fn auth_fails_with_missing_header() {
+		let token = Some("secret123".to_string());
+		let headers = make_headers(None);
+		let result = verify_operator_auth(&headers, &token);
+		assert!(result.is_err());
+		let (status, _) = result.unwrap_err();
+		assert_eq!(status, StatusCode::UNAUTHORIZED);
+	}
+
+	#[test]
+	fn auth_fails_with_non_bearer_scheme() {
+		let token = Some("secret123".to_string());
+		let headers = make_headers(Some("Basic secret123"));
+		let result = verify_operator_auth(&headers, &token);
+		assert!(result.is_err());
+	}
+
+	// ─── to_status_counts tests ─────────────────────────────────────────────
+
+	#[test]
+	fn status_counts_aggregation() {
+		let counts = vec![
+			("completed".to_string(), 10),
+			("pending".to_string(), 3),
+			("fulfilling".to_string(), 2),
+			("failed".to_string(), 5),
+			("expired".to_string(), 1),
+		];
+		let result = to_status_counts(&counts);
+		assert_eq!(result.completed, 10);
+		assert_eq!(result.pending, 5);  // pending + fulfilling
+		assert_eq!(result.failed, 6);   // failed + expired
+		assert_eq!(result.total, 21);
+	}
+
+	#[test]
+	fn status_counts_empty() {
+		let result = to_status_counts(&[]);
+		assert_eq!(result.completed, 0);
+		assert_eq!(result.pending, 0);
+		assert_eq!(result.failed, 0);
+		assert_eq!(result.total, 0);
+	}
+
+	#[test]
+	fn status_counts_unknown_status_counted_as_pending() {
+		let counts = vec![
+			("some_new_status".to_string(), 7),
+		];
+		let result = to_status_counts(&counts);
+		assert_eq!(result.pending, 7);
+		assert_eq!(result.total, 7);
+	}
+
 }
