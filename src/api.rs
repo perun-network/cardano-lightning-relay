@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 
 #[derive(Clone)]
 pub(crate) struct ApiState {
@@ -64,6 +65,12 @@ impl RateLimiter {
 
 	pub fn check(&mut self, ip: std::net::IpAddr) -> bool {
 		let now = std::time::Instant::now();
+
+		// Periodically evict expired entries to prevent unbounded memory growth
+		if self.requests.len() > 1000 {
+			self.requests.retain(|_, (_, ts)| now.duration_since(*ts) <= self.window);
+		}
+
 		let entry = self.requests.entry(ip).or_insert((0, now));
 		if now.duration_since(entry.1) > self.window {
 			*entry = (1, now);
@@ -235,6 +242,7 @@ fn verify_operator_auth(
 pub(crate) fn create_router(state: ApiState) -> Router {
 	Router::new()
 		// Public endpoints
+		.route("/health", get(handle_health))
 		.route("/info", get(handle_relay_info))
 		.route("/swap/request", post(handle_swap_request))
 		.route("/swap/status/{hash}", get(handle_swap_status))
@@ -250,7 +258,36 @@ pub(crate) fn create_router(state: ApiState) -> Router {
 		.route("/pool/withdraw", post(handle_pool_withdraw))
 		.with_state(state)
 		.layer(CorsLayer::permissive())
+		.layer(RequestBodyLimitLayer::new(16 * 1024)) // 16 KB max request body
 }
+
+// ─── Health check ──────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct HealthResponse {
+	status: &'static str,
+	cardano: bool,
+	pending_swaps: i64,
+	pending_offramps: i64,
+}
+
+async fn handle_health(
+	State(state): State<ApiState>,
+) -> Json<HealthResponse> {
+	let cardano_ok = state.operator.agent().query_state().await.is_ok();
+	Json(HealthResponse {
+		status: if cardano_ok { "ok" } else { "degraded" },
+		cardano: cardano_ok,
+		pending_swaps: state.swap_db.count_active_swaps(),
+		pending_offramps: state.swap_db.count_active_offramps(),
+	})
+}
+
+// ─── String length constants ───────────────────────────────────────────────
+
+const MAX_BOLT11_LEN: usize = 2048;
+const MAX_CARDANO_ADDR_LEN: usize = 256;
+const MAX_TX_HASH_LEN: usize = 128;
 
 // ─── Onramp handlers ────────────────────────────────────────────────────────
 
@@ -268,6 +305,10 @@ async fn handle_swap_request(
 	if req.amount_cbtc <= 0 || req.amount_cbtc > 10_000_000_000 {
 		return Err((StatusCode::BAD_REQUEST,
 			Json(ErrorResponse { error: "amount must be between 1 and 10,000,000,000 cBTC".into() })));
+	}
+	if req.cardano_address.len() > MAX_CARDANO_ADDR_LEN {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "cardano_address too long".into() })));
 	}
 
 	// Reject if too many active swaps (prevents pool liquidity lockup via spam)
@@ -491,6 +532,14 @@ async fn handle_offramp_request(
 		return Err((StatusCode::BAD_REQUEST,
 			Json(ErrorResponse { error: "amount must be between 1 and 10,000,000,000 cBTC".into() })));
 	}
+	if req.bolt11.len() > MAX_BOLT11_LEN {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "bolt11 invoice too long".into() })));
+	}
+	if req.cardano_address.len() > MAX_CARDANO_ADDR_LEN {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "cardano_address too long".into() })));
+	}
 
 	// Reject if too many active offramps (prevents operator ADA drain via spam)
 	let active_offramps = state.swap_db.count_active_offramps();
@@ -535,6 +584,10 @@ async fn handle_offramp_deposit(
 	if req.offramp_id <= 0 {
 		return Err((StatusCode::BAD_REQUEST,
 			Json(ErrorResponse { error: "invalid offramp_id".into() })));
+	}
+	if req.cbtc_tx_hash.len() > MAX_TX_HASH_LEN || req.cbtc_tx_hash.is_empty() {
+		return Err((StatusCode::BAD_REQUEST,
+			Json(ErrorResponse { error: "invalid cbtc_tx_hash".into() })));
 	}
 	cardano_offramp::process_offramp_deposit(
 		&state.operator,
