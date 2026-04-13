@@ -34,16 +34,42 @@ pub(crate) async fn request_swap(
 	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + expiry_ms;
 
-	// Create LM invoice on Cardano
-	let (invoice_id, signed_tx) = operator
-		.create_invoice(amount_cbtc, &owner_pkh, now_ms, expires_at)
-		.await
-		.map_err(|e| format!("failed to build create_invoice tx: {}", e))?;
-
-	let tx_hash = operator
-		.submit_tx(&signed_tx)
-		.await
-		.map_err(|e| format!("failed to submit create_invoice tx: {}", e))?;
+	// Create LM invoice on Cardano (retry on BadInputs for Blockfrost lag)
+	let mut invoice_id = 0i64;
+	let mut tx_hash = String::new();
+	let mut last_err = String::new();
+	for attempt in 0..3 {
+		if attempt > 0 {
+			println!("CreateInvoice: retrying (attempt {}/3)...", attempt + 1);
+			tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+		}
+		match operator.create_invoice(amount_cbtc, &owner_pkh, now_ms, expires_at).await {
+			Ok((id, tx)) => {
+				invoice_id = id;
+				match operator.submit_tx(&tx).await {
+					Ok(hash) => { tx_hash = hash; last_err.clear(); break; },
+					Err(e) => {
+						let err_str = format!("{}", e);
+						if err_str.contains("already been included") {
+							tx_hash = "pending-confirmation".to_string();
+							last_err.clear();
+							break;
+						}
+						last_err = format!("failed to submit create_invoice tx: {}", e);
+						if !err_str.contains("BadInputs") { break; }
+					},
+				}
+			},
+			Err(e) => {
+				last_err = format!("failed to build create_invoice tx: {}", e);
+				if format!("{}", e).contains("collateral") { break; }
+				continue;
+			},
+		}
+	}
+	if !last_err.is_empty() {
+		return Err(last_err);
+	}
 
 	println!("Created LM invoice #{} on Cardano (tx: {})", invoice_id, tx_hash);
 
@@ -107,8 +133,8 @@ pub(crate) async fn fulfill_swap(
 	let invoice_id = mapping.invoice_id;
 	let invoice = match query_state_with_retry(
 		&*operator,
-		12,
-		std::time::Duration::from_secs(5),
+		24,
+		std::time::Duration::from_secs(10),
 		&format!("LM invoice #{}", invoice_id),
 		|state| state.invoices.iter().find(|i| i.invoice_id == invoice_id).cloned(),
 	)
@@ -122,26 +148,50 @@ pub(crate) async fn fulfill_swap(
 		},
 	};
 
-	// Build and submit the FulfillInvoice tx
-	let signed_tx = match operator.fulfill_invoice(&invoice, &mapping.cardano_address).await {
-		Ok(tx) => tx,
-		Err(e) => {
-			println!("ERROR: failed to build fulfill_invoice tx for swap {}: {}", payment_hash, e);
-			swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
-			return;
-		},
-	};
+	// Build and submit the FulfillInvoice tx (retry on BadInputs for Blockfrost indexing lag)
+	let mut last_error = String::new();
+	for attempt in 0..3 {
+		if attempt > 0 {
+			println!("Swap {}: retrying fulfill (attempt {}/3, waiting for Blockfrost indexing)...",
+				payment_hash, attempt + 1);
+			tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+		}
 
-	match operator.submit_tx(&signed_tx).await {
-		Ok(tx_hash) => {
-			println!("SUCCESS: swap {} fulfilled, cBTC sent to {}, tx: {}", payment_hash, mapping.cardano_address, tx_hash);
-			swap_db.update_status(&payment_hash, SwapStatus::Completed, Some(&tx_hash));
-		},
-		Err(e) => {
-			println!("ERROR: failed to submit fulfill_invoice tx for swap {}: {}", payment_hash, e);
-			swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
-		},
+		let signed_tx = match operator.fulfill_invoice(&invoice, &mapping.cardano_address).await {
+			Ok(tx) => tx,
+			Err(e) => {
+				last_error = format!("failed to build fulfill_invoice tx: {}", e);
+				if format!("{}", e).contains("collateral") {
+					// Collateral issue won't resolve with retries
+					break;
+				}
+				continue;
+			},
+		};
+
+		match operator.submit_tx(&signed_tx).await {
+			Ok(tx_hash) => {
+				println!("SUCCESS: swap {} fulfilled, cBTC sent to {}, tx: {}", payment_hash, mapping.cardano_address, tx_hash);
+				swap_db.update_status(&payment_hash, SwapStatus::Completed, Some(&tx_hash));
+				return;
+			},
+			Err(e) => {
+				let err_str = format!("{}", e);
+				if err_str.contains("already been included") {
+					println!("SUCCESS: swap {} fulfill TX already confirmed", payment_hash);
+					swap_db.update_status(&payment_hash, SwapStatus::Completed, None);
+					return;
+				}
+				last_error = format!("failed to submit fulfill_invoice tx: {}", e);
+				if !err_str.contains("BadInputs") {
+					break;
+				}
+			},
+		}
 	}
+
+	println!("ERROR: swap {} failed after retries: {}", payment_hash, last_error);
+	swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
 }
 
 /// Extract Cardano address from a BOLT11 invoice description.

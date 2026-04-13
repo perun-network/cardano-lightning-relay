@@ -76,16 +76,43 @@ pub(crate) async fn request_offramp(
 	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + expiry_ms;
 
-	// 4. Submit CreateOfframp TX on-chain
-	let (offramp_id, signed_tx) = operator
-		.create_offramp(amount_cbtc, &payment_hash, &refund_pkh, expires_at)
-		.await
-		.map_err(|e| format!("failed to build CreateOfframp tx: {}", e))?;
-
-	let create_tx_hash = operator
-		.submit_tx(&signed_tx)
-		.await
-		.map_err(|e| format!("failed to submit CreateOfframp tx: {}", e))?;
+	// 4. Submit CreateOfframp TX on-chain (retry on BadInputs for Blockfrost lag)
+	let mut offramp_id = 0i64;
+	let mut create_tx_hash = String::new();
+	let mut last_err = String::new();
+	for attempt in 0..3 {
+		if attempt > 0 {
+			println!("Offramp: retrying CreateOfframp (attempt {}/3)...", attempt + 1);
+			tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+		}
+		match operator.create_offramp(amount_cbtc, &payment_hash, &refund_pkh, expires_at).await {
+			Ok((id, tx)) => {
+				offramp_id = id;
+				match operator.submit_tx(&tx).await {
+					Ok(hash) => { create_tx_hash = hash; last_err.clear(); break; },
+					Err(e) => {
+						let err_str = format!("{}", e);
+						if err_str.contains("already been included") {
+							// TX was actually accepted — treat as success
+							create_tx_hash = "pending-confirmation".to_string();
+							last_err.clear();
+							break;
+						}
+						last_err = format!("failed to submit CreateOfframp tx: {}", e);
+						if !err_str.contains("BadInputs") { break; }
+					},
+				}
+			},
+			Err(e) => {
+				last_err = format!("failed to build CreateOfframp tx: {}", e);
+				if !format!("{}", e).contains("collateral") { continue; }
+				break;
+			},
+		}
+	}
+	if !last_err.is_empty() {
+		return Err(last_err);
+	}
 
 	println!(
 		"Offramp #{}: CreateOfframp TX submitted (hash: {})",
@@ -248,8 +275,8 @@ pub(crate) async fn complete_offramp(
 	let offramp_id = mapping.offramp_id;
 	let offramp = match query_state_with_retry(
 		&*operator,
-		6,
-		std::time::Duration::from_secs(5),
+		24,
+		std::time::Duration::from_secs(10),
 		&format!("Offramp #{}", offramp_id),
 		|state| state.offramps.iter().find(|o| o.offramp_id == offramp_id).cloned(),
 	)
