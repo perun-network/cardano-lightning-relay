@@ -351,23 +351,23 @@ impl SwapDb {
 	}
 
 	/// Count active (non-terminal) swaps: Pending or Fulfilling.
-	pub fn count_active_swaps(&self) -> i64 {
+	pub fn count_active_swaps(&self) -> Result<i64, String> {
 		let conn = self.conn.lock().unwrap();
 		conn.query_row(
 			"SELECT COUNT(*) FROM swap_mappings WHERE status IN ('pending', 'fulfilling')",
 			[],
 			|row| row.get(0),
-		).unwrap_or(0)
+		).map_err(|e| format!("failed to count active swaps: {}", e))
 	}
 
 	/// Count active (non-terminal) offramps: AwaitingDeposit, PendingVerification, PayingLightning, or DepositingToPool.
-	pub fn count_active_offramps(&self) -> i64 {
+	pub fn count_active_offramps(&self) -> Result<i64, String> {
 		let conn = self.conn.lock().unwrap();
 		conn.query_row(
 			"SELECT COUNT(*) FROM offramp_mappings WHERE status IN ('awaiting_deposit', 'pending_verification', 'paying_lightning', 'depositing_to_pool')",
 			[],
 			|row| row.get(0),
-		).unwrap_or(0)
+		).map_err(|e| format!("failed to count active offramps: {}", e))
 	}
 
 	/// Get swaps stuck in a given status (for crash recovery).
@@ -754,7 +754,7 @@ mod tests {
 		db.update_status("s2", SwapStatus::Fulfilling, None);
 		db.update_status("s3", SwapStatus::Completed, None);
 		// s1=Pending, s2=Fulfilling, s3=Completed → 2 active
-		assert_eq!(db.count_active_swaps(), 2);
+		assert_eq!(db.count_active_swaps().unwrap(), 2);
 	}
 
 	#[test]
@@ -766,7 +766,7 @@ mod tests {
 		db.update_offramp_status(2, OfframpStatus::PayingLightning, None, None, None);
 		db.update_offramp_status(3, OfframpStatus::Completed, None, None, None);
 		// o1=AwaitingDeposit, o2=PayingLightning, o3=Completed → 2 active
-		assert_eq!(db.count_active_offramps(), 2);
+		assert_eq!(db.count_active_offramps().unwrap(), 2);
 	}
 
 	#[test]

@@ -119,11 +119,16 @@ pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 		let operator_pkh = env::var("CARDANO_OPERATOR_PKH").unwrap_or_else(|_| {
 			panic!("CARDANO_ENABLED=true but CARDANO_OPERATOR_PKH not set");
 		});
+		let blockfrost_url = env::var("CARDANO_BLOCKFROST_URL")
+			.unwrap_or_else(|_| "http://localhost:8080/api/v1/".into());
+		let blockfrost_key = env::var("CARDANO_BLOCKFROST_KEY")
+			.unwrap_or_else(|_| "local".into());
+		if blockfrost_url.contains("localhost") {
+			println!("WARNING: CARDANO_BLOCKFROST_URL defaults to localhost — set it explicitly for production");
+		}
 		Some(CardanoRelayConfig {
-			blockfrost_url: env::var("CARDANO_BLOCKFROST_URL")
-				.unwrap_or_else(|_| "http://localhost:8080/api/v1/".into()),
-			blockfrost_key: env::var("CARDANO_BLOCKFROST_KEY")
-				.unwrap_or_else(|_| "local".into()),
+			blockfrost_url,
+			blockfrost_key,
 			skey_path,
 			script_address,
 			script_cbor_path,

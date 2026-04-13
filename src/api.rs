@@ -278,8 +278,8 @@ async fn handle_health(
 	Json(HealthResponse {
 		status: if cardano_ok { "ok" } else { "degraded" },
 		cardano: cardano_ok,
-		pending_swaps: state.swap_db.count_active_swaps(),
-		pending_offramps: state.swap_db.count_active_offramps(),
+		pending_swaps: state.swap_db.count_active_swaps().unwrap_or(-1),
+		pending_offramps: state.swap_db.count_active_offramps().unwrap_or(-1),
 	})
 }
 
@@ -312,7 +312,9 @@ async fn handle_swap_request(
 	}
 
 	// Reject if too many active swaps (prevents pool liquidity lockup via spam)
-	let active_swaps = state.swap_db.count_active_swaps();
+	let active_swaps = state.swap_db.count_active_swaps()
+		.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR,
+			Json(ErrorResponse { error: format!("database error: {}", e) })))?;
 	if active_swaps >= state.max_active_swaps {
 		return Err((StatusCode::SERVICE_UNAVAILABLE,
 			Json(ErrorResponse { error: format!(
@@ -425,7 +427,7 @@ async fn handle_pool_info(
 			reserved: s.reserved,
 			available: s.available(),
 			active_invoices: s.invoices.len(),
-			pending_swaps: state.swap_db.count_active_swaps(),
+			pending_swaps: state.swap_db.count_active_swaps().unwrap_or(-1),
 		})),
 		Err(e) => Err(Json(ErrorResponse {
 			error: format!("failed to query pool: {}", e),
@@ -542,7 +544,9 @@ async fn handle_offramp_request(
 	}
 
 	// Reject if too many active offramps (prevents operator ADA drain via spam)
-	let active_offramps = state.swap_db.count_active_offramps();
+	let active_offramps = state.swap_db.count_active_offramps()
+		.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR,
+			Json(ErrorResponse { error: format!("database error: {}", e) })))?;
 	if active_offramps >= state.max_active_offramps {
 		return Err((StatusCode::SERVICE_UNAVAILABLE,
 			Json(ErrorResponse { error: format!(

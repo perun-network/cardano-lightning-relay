@@ -186,14 +186,23 @@ pub(crate) async fn process_offramp_deposit(
 	let invoice = Bolt11Invoice::from_str(&mapping.bolt11)
 		.map_err(|e| format!("failed to re-parse bolt11: {:?}", e))?;
 
-	payment_cmds::send_payment(
+	if let Err(e) = payment_cmds::send_payment(
 		channel_manager,
 		&invoice,
 		None,
 		outbound_payments,
 		fs_store,
 	)
-	.await;
+	.await
+	{
+		// Payment initiation failed — revert to AwaitingDeposit so expiry/recovery can handle it
+		let msg = format!("Lightning payment initiation failed: {}", e);
+		println!("ERROR: Offramp #{}: {}", offramp_id, msg);
+		swap_db.update_offramp_status(
+			offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
+		);
+		return Err(msg);
+	}
 
 	Ok(())
 }

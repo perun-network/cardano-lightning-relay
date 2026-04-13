@@ -382,7 +382,10 @@ async fn start_ldk() {
 	// messages. Doing this only makes sense for a always-online public routing node, and doesn't
 	// provide you any direct value, but its nice to offer the service for others.
 	let channel_manager: Arc<ChannelManager> = Arc::new(channel_manager);
-	let resolver = "8.8.8.8:53".to_socket_addrs().unwrap().next().unwrap();
+	let resolver = "8.8.8.8:53".to_socket_addrs()
+		.expect("failed to resolve DNS address 8.8.8.8:53")
+		.next()
+		.expect("no socket address resolved for 8.8.8.8:53");
 	let domain_resolver =
 		Arc::new(OMDomainResolver::new(resolver, Some(Arc::clone(&channel_manager))));
 
@@ -438,17 +441,27 @@ async fn start_ldk() {
 			.expect("Failed to bind to listen port - is something else already listening on it?");
 		loop {
 			let peer_mgr = peer_manager_connection_handler.clone();
-			let tcp_stream = listener.accept().await.unwrap().0;
+			let tcp_stream = match listener.accept().await {
+				Ok((stream, _)) => stream,
+				Err(e) => {
+					println!("WARNING: failed to accept incoming connection: {}", e);
+					continue;
+				},
+			};
 			if stop_listen.load(Ordering::Acquire) {
 				return;
 			}
-			tokio::spawn(async move {
-				lightning_net_tokio::setup_inbound(
-					peer_mgr.clone(),
-					tcp_stream.into_std().unwrap(),
-				)
-				.await;
-			});
+			if let Ok(std_stream) = tcp_stream.into_std() {
+				tokio::spawn(async move {
+					lightning_net_tokio::setup_inbound(
+						peer_mgr.clone(),
+						std_stream,
+					)
+					.await;
+				});
+			} else {
+				println!("WARNING: failed to convert TCP stream to std");
+			}
 		}
 	});
 
@@ -465,7 +478,11 @@ async fn start_ldk() {
 			(chain_monitor_listener, &(channel_manager_listener, output_sweeper_listener));
 		let mut spv_client = SpvClient::new(chain_tip, chain_poller, &mut cache, &chain_listener);
 		loop {
-			spv_client.poll_best_tip().await.unwrap();
+			if let Err(e) = spv_client.poll_best_tip().await {
+				println!("WARNING: chain poll failed: {:?}, retrying in 5s", e);
+				tokio::time::sleep(Duration::from_secs(5)).await;
+				continue;
+			}
 			tokio::time::sleep(Duration::from_secs(1)).await;
 		}
 	});
@@ -742,7 +759,9 @@ async fn start_ldk() {
 			.expect("failed to bind API server");
 		println!("Cardano swap API listening on port {}", api_port);
 		tokio::spawn(async move {
-			axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap();
+			if let Err(e) = axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await {
+				println!("ERROR: API server exited: {}", e);
+			}
 		});
 	}
 
