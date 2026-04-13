@@ -4,7 +4,18 @@ End-to-end testing of the relay with devnet, payer node, and frontend.
 
 For the full step-by-step guide with troubleshooting, see `cardano-lightning-docs/LOCAL_FRONTEND_TEST_GUIDE.md`.
 
-## Quick start
+## One-command start
+
+```bash
+cd ~/pc-work/cardano-lightning-docs/flows_e2e_runs
+bash start_local_env.sh
+# Open http://localhost:5174
+# Pay invoices: echo 'sendpayment <bolt11>' > /tmp/payer_input
+# Check balance: bash check_cbtc_balance.sh <address>
+# Stop: bash stop_local_env.sh
+```
+
+## Manual quick start
 
 ```bash
 # 1. Build
