@@ -325,14 +325,14 @@ pub(crate) async fn poll_for_user_input(
 					} else {
 						match Bolt11Invoice::from_str(invoice_str) {
 							Ok(invoice) => {
-								payment_cmds::send_payment(
+								let _ = payment_cmds::send_payment(
 									&channel_manager,
 									&invoice,
 									user_provided_amt,
 									&outbound_payments,
 									&*fs_store,
 								)
-								.await
+								.await;
 							},
 							Err(e) => {
 								println!("ERROR: invalid invoice: {:?}", e);

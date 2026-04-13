@@ -108,7 +108,12 @@ pub(crate) fn handle_ldk_events<'a>(
 					},
 					PaymentPurpose::SpontaneousPayment(preimage) => Some(preimage),
 				};
-				channel_manager.claim_funds(payment_preimage.unwrap());
+				match payment_preimage {
+					Some(preimage) => channel_manager.claim_funds(preimage),
+					None => {
+						println!("WARNING: PaymentClaimable without preimage, cannot claim");
+					},
+				};
 			},
 			Event::PaymentClaimed { payment_hash, purpose, amount_msat, .. } => {
 				println!(
@@ -174,43 +179,47 @@ pub(crate) fn handle_ldk_events<'a>(
 				payment_id,
 				..
 			} => {
-				let write_future = {
-					let mut outbound = outbound_payments.lock().unwrap();
-					for (id, payment) in outbound.payments.iter_mut() {
-						if *id == payment_id.unwrap() {
-							payment.preimage = Some(payment_preimage);
-							payment.status = HTLCStatus::Succeeded;
-							println!(
-								"\nEVENT: successfully sent payment of {} millisatoshis{} from \
-										 payment hash {} with preimage {}",
-								payment.amt_msat,
-								if let Some(fee) = fee_paid_msat {
-									format!(" (fee {} msat)", fee)
-								} else {
-									"".to_string()
-								},
-								payment_hash,
-								payment_preimage
-							);
-							print!("> ");
-							std::io::stdout().flush().unwrap();
+				if let Some(pid) = payment_id {
+					let write_future = {
+						let mut outbound = outbound_payments.lock().unwrap();
+						for (id, payment) in outbound.payments.iter_mut() {
+							if *id == pid {
+								payment.preimage = Some(payment_preimage);
+								payment.status = HTLCStatus::Succeeded;
+								println!(
+									"\nEVENT: successfully sent payment of {} millisatoshis{} from \
+											 payment hash {} with preimage {}",
+									payment.amt_msat,
+									if let Some(fee) = fee_paid_msat {
+										format!(" (fee {} msat)", fee)
+									} else {
+										"".to_string()
+									},
+									payment_hash,
+									payment_preimage
+								);
+								print!("> ");
+								std::io::stdout().flush().unwrap();
+							}
+						}
+						fs_store.write("", "", OUTBOUND_PAYMENTS_FNAME, outbound.encode())
+					};
+					write_future.await.unwrap();
+
+					// Check if this is an offramp payment and trigger pool deposit
+					if let (Some(db), Some(op)) = (&swap_db, &operator_agent) {
+						let hash_hex = format!("{}", payment_hash);
+						if db.get_offramp_by_payment_hash(&hash_hex).is_some() {
+							let op = Arc::clone(op);
+							let db = Arc::clone(db);
+							let preimage_hex = format!("{}", payment_preimage);
+							tokio::spawn(async move {
+								cardano_offramp::complete_offramp(op, db, hash_hex, preimage_hex).await;
+							});
 						}
 					}
-					fs_store.write("", "", OUTBOUND_PAYMENTS_FNAME, outbound.encode())
-				};
-				write_future.await.unwrap();
-
-				// Check if this is an offramp payment and trigger pool deposit
-				if let (Some(db), Some(op)) = (&swap_db, &operator_agent) {
-					let hash_hex = format!("{}", payment_hash);
-					if db.get_offramp_by_payment_hash(&hash_hex).is_some() {
-						let op = Arc::clone(op);
-						let db = Arc::clone(db);
-						let preimage_hex = format!("{}", payment_preimage);
-						tokio::spawn(async move {
-							cardano_offramp::complete_offramp(op, db, hash_hex, preimage_hex).await;
-						});
-					}
+				} else {
+					println!("WARNING: PaymentSent without payment_id for hash {}", payment_hash);
 				}
 			},
 			Event::OpenChannelRequest {

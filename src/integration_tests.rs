@@ -1067,11 +1067,11 @@ async fn test_request_offramp_fills_active_cap() {
 	}
 
 	// All 3 should be in AwaitingDeposit = active
-	assert_eq!(db.count_active_offramps(), 3);
+	assert_eq!(db.count_active_offramps().unwrap(), 3);
 
 	// Complete one → active count drops
 	db.update_offramp_status(1, OfframpStatus::Completed, None, None, None);
-	assert_eq!(db.count_active_offramps(), 2);
+	assert_eq!(db.count_active_offramps().unwrap(), 2);
 }
 
 #[tokio::test]

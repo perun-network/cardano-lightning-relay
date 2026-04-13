@@ -21,27 +21,20 @@ pub(crate) async fn send_payment(
 	channel_manager: &ChannelManager, invoice: &lightning_invoice::Bolt11Invoice,
 	required_amount_msat: Option<u64>, outbound_payments: &Mutex<OutboundPaymentInfoStorage>,
 	fs_store: &FilesystemStore,
-) {
+) -> Result<(), String> {
 	let payment_id = PaymentId((*invoice.payment_hash()).to_byte_array());
 	let payment_secret = Some(*invoice.payment_secret());
 	let amt_msat = match (invoice.amount_milli_satoshis(), required_amount_msat) {
-		// pay_for_bolt11_invoice only validates that the amount we pay is >= the invoice's
-		// required amount, not that its equal (to allow for overpayment). As that is somewhat
-		// surprising, here we check and reject all disagreements in amount.
 		(Some(inv_amt), Some(req_amt)) if inv_amt != req_amt => {
-			println!(
-				"Amount didn't match invoice value of {}msat",
-				invoice.amount_milli_satoshis().unwrap_or(0)
-			);
-			print!("> ");
-			return;
+			return Err(format!(
+				"amount mismatch: invoice {} msat vs required {} msat",
+				inv_amt, req_amt,
+			));
 		},
 		(Some(inv_amt), _) => inv_amt,
 		(_, Some(req_amt)) => req_amt,
 		(None, None) => {
-			println!("Need an amount to pay an amountless invoice");
-			print!("> ");
-			return;
+			return Err("amountless invoice with no required amount".into());
 		},
 	};
 	let write_future = {
@@ -70,6 +63,7 @@ pub(crate) async fn send_payment(
 			let payee_pubkey = invoice.recover_payee_pub_key();
 			println!("EVENT: initiated sending {} msats to {}", amt_msat, payee_pubkey);
 			print!("> ");
+			Ok(())
 		},
 		Err(e) => {
 			println!("ERROR: failed to send payment: {:?}", e);
@@ -81,8 +75,9 @@ pub(crate) async fn send_payment(
 				fs_store.write("", "", OUTBOUND_PAYMENTS_FNAME, outbound_payments.encode())
 			};
 			write_future.await.unwrap();
+			Err(format!("failed to send payment: {:?}", e))
 		},
-	};
+	}
 }
 
 pub(crate) async fn keysend<E: EntropySource>(
