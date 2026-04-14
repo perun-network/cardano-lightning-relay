@@ -83,23 +83,24 @@ pub(crate) async fn request_offramp(
 	for attempt in 0..3 {
 		if attempt > 0 {
 			println!("Offramp: retrying CreateOfframp (attempt {}/3)...", attempt + 1);
-			tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+			tokio::time::sleep(std::time::Duration::from_secs(15)).await;
 		}
 		match operator.create_offramp(amount_cbtc, &payment_hash, &refund_pkh, expires_at).await {
 			Ok((id, tx)) => {
 				offramp_id = id;
 				match operator.submit_tx(&tx).await {
-					Ok(hash) => { create_tx_hash = hash; last_err.clear(); break; },
+					Ok(hash) => {
+						println!("Offramp: CreateOfframp TX accepted by Blockfrost (hash: {})", hash);
+						create_tx_hash = hash; last_err.clear(); break;
+					},
 					Err(e) => {
 						let err_str = format!("{}", e);
-						if err_str.contains("already been included") {
-							// TX was actually accepted — treat as success
-							create_tx_hash = "pending-confirmation".to_string();
-							last_err.clear();
-							break;
-						}
+						println!("Offramp: CreateOfframp submit error: {}", err_str);
 						last_err = format!("failed to submit CreateOfframp tx: {}", e);
-						if !err_str.contains("BadInputs") { break; }
+						if err_str.contains("already been included") || err_str.contains("BadInputs") {
+							continue;
+						}
+						break;
 					},
 				}
 			},
@@ -293,36 +294,51 @@ pub(crate) async fn complete_offramp(
 		},
 	};
 
-	// Build and submit FulfillOfframp TX
-	let signed_tx = match operator.fulfill_offramp(&offramp).await {
-		Ok(tx) => tx,
-		Err(e) => {
-			let msg = format!("failed to build FulfillOfframp tx: {}", e);
-			println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
-			swap_db.update_offramp_status(
-				mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
-			);
-			return;
-		},
-	};
-
-	match operator.submit_tx(&signed_tx).await {
-		Ok(tx_hash) => {
+	// Build and submit FulfillOfframp TX (retry on BadInputs for Blockfrost lag)
+	let mut last_fulfill_err = String::new();
+	for attempt in 0..3 {
+		if attempt > 0 {
 			println!(
-				"SUCCESS: Offramp #{} completed, FulfillOfframp TX: {}",
-				mapping.offramp_id, tx_hash,
+				"Offramp #{}: retrying FulfillOfframp (attempt {}/3, waiting for Blockfrost indexing)...",
+				mapping.offramp_id, attempt + 1,
 			);
-			swap_db.update_offramp_status(
-				mapping.offramp_id, OfframpStatus::Completed, None, Some(&tx_hash), None,
-			);
-		},
-		Err(e) => {
-			let msg = format!("failed to submit FulfillOfframp tx: {}", e);
-			println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
-			swap_db.update_offramp_status(
-				mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
-			);
-		},
+			tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+		}
+		let signed_tx = match operator.fulfill_offramp(&offramp).await {
+			Ok(tx) => tx,
+			Err(e) => {
+				last_fulfill_err = format!("failed to build FulfillOfframp tx: {}", e);
+				if format!("{}", e).contains("collateral") { continue; }
+				break;
+			},
+		};
+		match operator.submit_tx(&signed_tx).await {
+			Ok(tx_hash) => {
+				println!(
+					"SUCCESS: Offramp #{} completed, FulfillOfframp TX: {}",
+					mapping.offramp_id, tx_hash,
+				);
+				swap_db.update_offramp_status(
+					mapping.offramp_id, OfframpStatus::Completed, None, Some(&tx_hash), None,
+				);
+				last_fulfill_err.clear();
+				break;
+			},
+			Err(e) => {
+				let err_str = format!("{}", e);
+				last_fulfill_err = format!("failed to submit FulfillOfframp tx: {}", e);
+				if err_str.contains("BadInputs") || err_str.contains("already been included") {
+					continue;
+				}
+				break;
+			},
+		}
+	}
+	if !last_fulfill_err.is_empty() {
+		println!("ERROR: Offramp #{}: {}", mapping.offramp_id, last_fulfill_err);
+		swap_db.update_offramp_status(
+			mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&last_fulfill_err),
+		);
 	}
 }
 
