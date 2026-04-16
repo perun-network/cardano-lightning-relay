@@ -734,6 +734,20 @@ async fn start_ldk() {
 		if swap_expiry_secs != 3600 {
 			println!("Swap/offramp expiry set to {} seconds", swap_expiry_secs);
 		}
+		// Rate limit: max requests per IP per window. Production-safe default
+		// (10/60s) is too strict for E2E tests and for a frontend that polls
+		// status after every action — override via env for dev/test.
+		let rate_limit_max: u32 = std::env::var("CARDANO_API_RATE_LIMIT_MAX")
+			.unwrap_or_else(|_| "10".into())
+			.parse()
+			.expect("CARDANO_API_RATE_LIMIT_MAX must be a number");
+		let rate_limit_window_secs: u64 = std::env::var("CARDANO_API_RATE_LIMIT_WINDOW_SECS")
+			.unwrap_or_else(|_| "60".into())
+			.parse()
+			.expect("CARDANO_API_RATE_LIMIT_WINDOW_SECS must be a number");
+		if rate_limit_max != 10 || rate_limit_window_secs != 60 {
+			println!("API rate limit: {} requests per {}s per IP", rate_limit_max, rate_limit_window_secs);
+		}
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),
 			swap_db: Arc::clone(db),
@@ -744,7 +758,7 @@ async fn start_ldk() {
 			fs_store: Arc::clone(&fs_store),
 			auth_token,
 			rate_limiter: Arc::new(std::sync::Mutex::new(
-				api::RateLimiter::new(10, 60), // 10 requests per minute per IP
+				api::RateLimiter::new(rate_limit_max, rate_limit_window_secs),
 			)),
 			max_active_swaps,
 			max_active_offramps,
