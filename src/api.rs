@@ -17,7 +17,7 @@ use crate::cardano_swap;
 use crate::cli::payment_cmds;
 use crate::helpers::current_timestamp_ms;
 use crate::mapping::SwapDb;
-use crate::types::{ChannelManager, InboundPaymentInfoStorage, OutboundPaymentInfoStorage};
+use crate::types::{ChannelManager, InboundPaymentInfoStorage, OutboundPaymentInfoStorage, OutputSweeper};
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
@@ -36,6 +36,7 @@ pub(crate) struct ApiState {
 	pub operator: Arc<OperatorAgent>,
 	pub swap_db: Arc<SwapDb>,
 	pub channel_manager: Arc<ChannelManager>,
+	pub output_sweeper: Arc<OutputSweeper>,
 	pub inbound_payments: Arc<Mutex<InboundPaymentInfoStorage>>,
 	pub outbound_payments: Arc<Mutex<OutboundPaymentInfoStorage>>,
 	pub fs_store: Arc<FilesystemStore>,
@@ -164,6 +165,61 @@ pub(crate) struct RelayInfoResponse {
 	pub exchange_rate: f64,
 }
 
+// ─── Balance response types ─────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub(crate) struct ChannelBalance {
+	pub channel_id: String,
+	pub peer_pubkey: String,
+	pub is_ready: bool,
+	pub channel_value_sats: u64,
+	pub outbound_msat: u64,
+	pub inbound_msat: u64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct BtcBalance {
+	/// Sum of outbound capacity across all channels (relay's Lightning-side BTC).
+	pub channels_outbound_msat: u64,
+	/// Sum of inbound capacity across all channels (counterparty's BTC on this relay).
+	pub channels_inbound_msat: u64,
+	/// Sum of values of spendable outputs tracked by the sweeper (post-close on-chain BTC).
+	/// This is the total of `sweeper_pending_sats` + `sweeper_confirmed_sats`.
+	///
+	/// NOTE: outputs are PRUNED from `tracked_spendable_outputs()` after
+	/// `PRUNE_DELAY_BLOCKS` (~144 blocks) past spend confirmation. After pruning,
+	/// the BTC is at the sweeper's destination address (bitcoind wallet in our setup)
+	/// but is no longer reflected in this number. For a comprehensive "BTC controlled
+	/// by the relay", also query the destination wallet.
+	pub on_chain_sweeper_sats: u64,
+	/// Outputs tracked but whose spending TX hasn't confirmed yet (still unsafe — may require
+	/// additional blocks before the BTC is fully controlled).
+	pub sweeper_pending_sats: u64,
+	/// Outputs whose spending TX has confirmed (BTC is at the sweeper destination), but
+	/// still tracked until `PRUNE_DELAY_BLOCKS` to handle potential reorgs.
+	pub sweeper_confirmed_sats: u64,
+	/// Per-channel breakdown.
+	pub channels: Vec<ChannelBalance>,
+	/// Number of outputs tracked by the sweeper (for diagnostics).
+	pub sweeper_outputs: usize,
+}
+
+#[derive(Serialize)]
+pub(crate) struct CbtcBalance {
+	/// Total cBTC in the on-chain contract pool.
+	pub pool_total: i64,
+	pub pool_reserved: i64,
+	pub pool_available: i64,
+	pub active_invoices: usize,
+	pub active_offramps: usize,
+}
+
+#[derive(Serialize)]
+pub(crate) struct BalanceResponse {
+	pub btc: BtcBalance,
+	pub cbtc: CbtcBalance,
+}
+
 // ─── Pool deposit types ─────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -248,6 +304,7 @@ pub(crate) fn create_router(state: ApiState) -> Router {
 		.route("/swap/status/{hash}", get(handle_swap_status))
 		.route("/swap/history", get(handle_swap_history))
 		.route("/pool/info", get(handle_pool_info))
+		.route("/balance", get(handle_balance))
 		.route("/offramp/request", post(handle_offramp_request))
 		.route("/offramp/deposit", post(handle_offramp_deposit))
 		.route("/offramp/status/{id}", get(handle_offramp_status))
@@ -432,6 +489,83 @@ async fn handle_pool_info(
 		Err(e) => Err(Json(ErrorResponse {
 			error: format!("failed to query pool: {}", e),
 		})),
+	}
+}
+
+async fn handle_balance(
+	State(state): State<ApiState>,
+) -> Result<Json<BalanceResponse>, Json<ErrorResponse>> {
+	// cBTC side — query on-chain contract state
+	let cbtc = match state.operator.agent().query_state().await {
+		Ok(s) => CbtcBalance {
+			pool_total: s.total_liquidity,
+			pool_reserved: s.reserved,
+			pool_available: s.available(),
+			active_invoices: s.invoices.len(),
+			active_offramps: s.offramps.len(),
+		},
+		Err(e) => {
+			return Err(Json(ErrorResponse {
+				error: format!("failed to query cBTC pool: {}", e),
+			}));
+		},
+	};
+
+	// BTC side — sum channel balances + sweeper-tracked outputs
+	let mut channels_outbound_msat = 0u64;
+	let mut channels_inbound_msat = 0u64;
+	let mut channels = Vec::new();
+	for c in state.channel_manager.list_channels() {
+		channels_outbound_msat += c.outbound_capacity_msat;
+		channels_inbound_msat += c.inbound_capacity_msat;
+		channels.push(ChannelBalance {
+			channel_id: format!("{}", c.channel_id),
+			peer_pubkey: format!("{}", c.counterparty.node_id),
+			is_ready: c.is_channel_ready,
+			channel_value_sats: c.channel_value_satoshis,
+			outbound_msat: c.outbound_capacity_msat,
+			inbound_msat: c.inbound_capacity_msat,
+		});
+	}
+
+	// Sum post-close spendable outputs tracked by the sweeper, broken down by status.
+	let tracked = state.output_sweeper.tracked_spendable_outputs();
+	let sweeper_outputs = tracked.len();
+	let mut sweeper_pending_sats: u64 = 0;
+	let mut sweeper_confirmed_sats: u64 = 0;
+	for o in &tracked {
+		let v = spendable_output_value_sats(o);
+		use lightning::util::sweep::OutputSpendStatus;
+		match o.status {
+			OutputSpendStatus::PendingThresholdConfirmations { .. } => sweeper_confirmed_sats += v,
+			_ => sweeper_pending_sats += v,
+		}
+	}
+	let on_chain_sweeper_sats = sweeper_pending_sats + sweeper_confirmed_sats;
+
+	Ok(Json(BalanceResponse {
+		btc: BtcBalance {
+			channels_outbound_msat,
+			channels_inbound_msat,
+			on_chain_sweeper_sats,
+			sweeper_pending_sats,
+			sweeper_confirmed_sats,
+			channels,
+			sweeper_outputs,
+		},
+		cbtc,
+	}))
+}
+
+/// Extract the satoshi value from a TrackedSpendableOutput's descriptor.
+fn spendable_output_value_sats(
+	o: &lightning::util::sweep::TrackedSpendableOutput,
+) -> u64 {
+	use lightning::sign::SpendableOutputDescriptor;
+	match &o.descriptor {
+		SpendableOutputDescriptor::StaticOutput { output, .. } => output.value.to_sat(),
+		SpendableOutputDescriptor::DelayedPaymentOutput(d) => d.output.value.to_sat(),
+		SpendableOutputDescriptor::StaticPaymentOutput(s) => s.output.value.to_sat(),
 	}
 }
 
