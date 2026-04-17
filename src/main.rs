@@ -765,6 +765,7 @@ async fn start_ldk() {
 			swap_db: Arc::clone(db),
 			channel_manager: Arc::clone(&channel_manager),
 			output_sweeper: Arc::clone(&output_sweeper),
+			bitcoind_client: Arc::clone(&bitcoind_client),
 			inbound_payments: Arc::clone(&inbound_payments),
 			outbound_payments: Arc::clone(&outbound_payments),
 			fs_store: Arc::clone(&fs_store),
@@ -798,6 +799,7 @@ async fn start_ldk() {
 	let cli_fs_store = Arc::clone(&fs_store);
 	let cli_peer_manager = Arc::clone(&peer_manager);
 	let cli_output_sweeper = Arc::clone(&output_sweeper);
+	let cli_bitcoind_client = Arc::clone(&bitcoind_client);
 	let cli_poll = tokio::task::spawn(cli::poll_for_user_input(
 		cli_peer_manager,
 		cli_channel_manager,
@@ -809,6 +811,7 @@ async fn start_ldk() {
 		cli_fs_store,
 		operator_agent,
 		cli_output_sweeper,
+		cli_bitcoind_client,
 	));
 
 	// Exit if either CLI polling exits or the background processor exits (which shouldn't happen

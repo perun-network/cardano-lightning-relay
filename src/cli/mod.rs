@@ -5,6 +5,7 @@ pub(crate) mod peer_cmds;
 
 use crate::disk::{INBOUND_PAYMENTS_FNAME, OUTBOUND_PAYMENTS_FNAME};
 use crate::hex_utils;
+use crate::bitcoind_client::BitcoindClient;
 use crate::types::{
 	ChainMonitor, ChannelManager, HTLCStatus, InboundPaymentInfoStorage, MillisatAmount,
 	NetworkGraph, OutboundPaymentInfoStorage, OutputSweeper, PaymentInfo, PeerManager,
@@ -75,6 +76,7 @@ pub(crate) async fn poll_for_user_input(
 	network_graph: Arc<NetworkGraph>, inbound_payments: Arc<Mutex<InboundPaymentInfoStorage>>,
 	outbound_payments: Arc<Mutex<OutboundPaymentInfoStorage>>, fs_store: Arc<FilesystemStore>,
 	operator_agent: Option<Arc<OperatorAgent>>, output_sweeper: Arc<OutputSweeper>,
+	bitcoind_client: Arc<BitcoindClient>,
 ) {
 	println!(
 		"LDK startup successful. Enter \"help\" to view available commands. Press Ctrl-D to quit."
@@ -593,7 +595,7 @@ pub(crate) async fn poll_for_user_input(
 					}
 				},
 				"getbalance" => {
-					print_balance(&channel_manager, &output_sweeper, operator_agent.as_ref()).await;
+					print_balance(&channel_manager, &output_sweeper, &bitcoind_client, operator_agent.as_ref()).await;
 				},
 				"cardano-deposit" => {
 					if let Some(ref op) = operator_agent {
@@ -702,7 +704,7 @@ fn help() {
 ///   - On-chain contract pool state (if CARDANO_ENABLED)
 async fn print_balance(
 	channel_manager: &Arc<ChannelManager>, output_sweeper: &Arc<OutputSweeper>,
-	operator_agent: Option<&Arc<OperatorAgent>>,
+	bitcoind_client: &Arc<BitcoindClient>, operator_agent: Option<&Arc<OperatorAgent>>,
 ) {
 	println!("Balance:");
 	println!("  BTC (Lightning side):");
@@ -747,6 +749,11 @@ async fn print_balance(
 	println!("    pending sats:        {} (spend TX not yet confirmed)", pending);
 	println!("    confirmed sats:      {} (swept, awaiting prune delay)", confirmed);
 	println!("    total sats:          {}", pending + confirmed);
+
+	// Full bitcoind wallet balance (includes swept outputs + pre-channel funding)
+	let wallet_sats = bitcoind_client.get_wallet_balance_sats().await;
+	println!("  BTC (bitcoind wallet — full on-chain balance):");
+	println!("    confirmed sats:      {}", wallet_sats);
 
 	// cBTC contract state.
 	println!("  cBTC (Cardano contract pool):");

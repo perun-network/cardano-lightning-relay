@@ -307,6 +307,24 @@ impl BitcoindClient {
 			.unwrap()
 	}
 
+	pub async fn get_wallet_balance_sats(&self) -> u64 {
+		match self
+			.bitcoind_rpc_client
+			.call_method::<crate::convert::WalletBalance>("getbalance", &vec![])
+			.await
+		{
+			Ok(wb) => wb.confirmed_sats,
+			Err(e) => {
+				lightning::log_warn!(
+					&*self.logger,
+					"Failed to query bitcoind wallet balance: {:?}",
+					e
+				);
+				0
+			},
+		}
+	}
+
 	pub fn list_unspent(&self) -> impl Future<Output = ListUnspentResponse> {
 		let rpc_client = self.get_new_rpc_client();
 		async move {

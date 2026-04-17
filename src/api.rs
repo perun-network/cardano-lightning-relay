@@ -12,6 +12,7 @@
 //!   POST /pool/deposit       — Deposit cBTC into pool
 //!   POST /pool/withdraw      — Withdraw cBTC from pool
 
+use crate::bitcoind_client::BitcoindClient;
 use crate::cardano_offramp;
 use crate::cardano_swap;
 use crate::cli::payment_cmds;
@@ -37,6 +38,7 @@ pub(crate) struct ApiState {
 	pub swap_db: Arc<SwapDb>,
 	pub channel_manager: Arc<ChannelManager>,
 	pub output_sweeper: Arc<OutputSweeper>,
+	pub bitcoind_client: Arc<BitcoindClient>,
 	pub inbound_payments: Arc<Mutex<InboundPaymentInfoStorage>>,
 	pub outbound_payments: Arc<Mutex<OutboundPaymentInfoStorage>>,
 	pub fs_store: Arc<FilesystemStore>,
@@ -202,6 +204,9 @@ pub(crate) struct BtcBalance {
 	pub channels: Vec<ChannelBalance>,
 	/// Number of outputs tracked by the sweeper (for diagnostics).
 	pub sweeper_outputs: usize,
+	/// Confirmed balance in the bitcoind wallet (includes swept post-close BTC +
+	/// any pre-channel funding). This is the full on-chain BTC the relay controls.
+	pub wallet_sats: u64,
 }
 
 #[derive(Serialize)]
@@ -543,6 +548,9 @@ async fn handle_balance(
 	}
 	let on_chain_sweeper_sats = sweeper_pending_sats + sweeper_confirmed_sats;
 
+	// Full on-chain BTC in the bitcoind wallet (includes swept outputs + pre-channel funding)
+	let wallet_sats = state.bitcoind_client.get_wallet_balance_sats().await;
+
 	Ok(Json(BalanceResponse {
 		btc: BtcBalance {
 			channels_outbound_msat,
@@ -552,6 +560,7 @@ async fn handle_balance(
 			sweeper_confirmed_sats,
 			channels,
 			sweeper_outputs,
+			wallet_sats,
 		},
 		cbtc,
 	}))
