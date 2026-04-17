@@ -7,6 +7,7 @@ mod cardano_ops;
 mod cardano_swap;
 mod cli;
 mod convert;
+mod bdk_wallet;
 mod disk;
 mod esplora;
 mod events;
