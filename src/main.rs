@@ -696,6 +696,18 @@ async fn start_ldk() {
 		recovery::recover_depositing_offramps(op.as_ref(), db).await;
 	}
 
+	// Reconcile on-chain state: cancel expired invoices/offramps that were
+	// orphaned by prior relay restarts (not tracked in SQLite but still on-chain).
+	// Env var opt-in because it modifies contract state and takes 30+ seconds per entry.
+	if let Some(ref op) = operator_agent {
+		if std::env::var("CARDANO_RECONCILE_ON_STARTUP").unwrap_or_default() == "1" {
+			println!("Reconciling on-chain state (cancelling orphaned expired entries)...");
+			crate::cli::cardano_cmds::cancel_expired(op).await;
+			crate::cli::cardano_cmds::cancel_expired_offramps(op).await;
+			println!("Reconciliation complete.");
+		}
+	}
+
 	// Start expiry monitors for Cardano swaps and offramps
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
 		tokio::spawn(background::monitor_expired_swaps(

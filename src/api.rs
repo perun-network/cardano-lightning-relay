@@ -579,25 +579,31 @@ async fn handle_pool_deposit(
 		return Err((StatusCode::BAD_REQUEST,
 			Json(ErrorResponse { error: "deposit amount must be positive".into() })));
 	}
-	let signed_tx = state
-		.operator
-		.deposit(req.amount)
-		.await
-		.map_err(|e| {
-			println!("ERROR: pool deposit failed: {}", e);
-			(StatusCode::BAD_REQUEST,
-			Json(ErrorResponse { error: "deposit transaction failed".into() }))
-		})?;
 
-	let tx_hash = state
-		.operator
-		.submit_tx(&signed_tx)
-		.await
-		.map_err(|e| {
-			println!("ERROR: pool deposit submit failed: {}", e);
-			(StatusCode::INTERNAL_SERVER_ERROR,
-			Json(ErrorResponse { error: "deposit submission failed".into() }))
+	// Timeout: deposit can hang if the script UTxO is contended (e.g. another
+	// TX is consuming it concurrently). Fail fast rather than block the API.
+	let deposit_fut = async {
+		let signed_tx = state.operator.deposit(req.amount).await.map_err(|e| {
+			format!("build failed: {}", e)
 		})?;
+		state.operator.submit_tx(&signed_tx).await.map_err(|e| {
+			format!("submit failed: {}", e)
+		})
+	};
+
+	let tx_hash = match tokio::time::timeout(std::time::Duration::from_secs(30), deposit_fut).await {
+		Ok(Ok(hash)) => hash,
+		Ok(Err(e)) => {
+			println!("ERROR: pool deposit failed: {}", e);
+			return Err((StatusCode::BAD_REQUEST,
+				Json(ErrorResponse { error: format!("deposit failed: {}", e) })));
+		},
+		Err(_) => {
+			println!("ERROR: pool deposit timed out after 30s");
+			return Err((StatusCode::SERVICE_UNAVAILABLE,
+				Json(ErrorResponse { error: "deposit timed out — script UTxO may be contended, retry later".into() })));
+		},
+	};
 
 	let new_total = state.operator.agent().query_state().await
 		.ok()
@@ -620,25 +626,29 @@ async fn handle_pool_withdraw(
 		return Err((StatusCode::BAD_REQUEST,
 			Json(ErrorResponse { error: "withdraw amount must be positive".into() })));
 	}
-	let signed_tx = state
-		.operator
-		.withdraw(req.amount)
-		.await
-		.map_err(|e| {
-			println!("ERROR: pool withdraw failed: {}", e);
-			(StatusCode::BAD_REQUEST,
-			Json(ErrorResponse { error: "withdraw transaction failed".into() }))
-		})?;
 
-	let tx_hash = state
-		.operator
-		.submit_tx(&signed_tx)
-		.await
-		.map_err(|e| {
-			println!("ERROR: pool withdraw submit failed: {}", e);
-			(StatusCode::INTERNAL_SERVER_ERROR,
-			Json(ErrorResponse { error: "withdraw submission failed".into() }))
+	let withdraw_fut = async {
+		let signed_tx = state.operator.withdraw(req.amount).await.map_err(|e| {
+			format!("build failed: {}", e)
 		})?;
+		state.operator.submit_tx(&signed_tx).await.map_err(|e| {
+			format!("submit failed: {}", e)
+		})
+	};
+
+	let tx_hash = match tokio::time::timeout(std::time::Duration::from_secs(30), withdraw_fut).await {
+		Ok(Ok(hash)) => hash,
+		Ok(Err(e)) => {
+			println!("ERROR: pool withdraw failed: {}", e);
+			return Err((StatusCode::BAD_REQUEST,
+				Json(ErrorResponse { error: format!("withdraw failed: {}", e) })));
+		},
+		Err(_) => {
+			println!("ERROR: pool withdraw timed out after 30s");
+			return Err((StatusCode::SERVICE_UNAVAILABLE,
+				Json(ErrorResponse { error: "withdraw timed out — script UTxO may be contended, retry later".into() })));
+		},
+	};
 
 	let new_total = state.operator.agent().query_state().await
 		.ok()
