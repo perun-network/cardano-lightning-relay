@@ -44,6 +44,10 @@ pub struct BitcoindClient {
 	fees: Arc<HashMap<ConfirmationTarget, AtomicU32>>,
 	main_runtime_handle: Handle,
 	logger: Arc<FilesystemLogger>,
+	/// When set, broadcasting and fee estimation delegate to the Esplora client.
+	pub(crate) esplora: Option<Arc<crate::esplora::EsploraClient>>,
+	/// When set, wallet operations (UTXOs, signing, change addresses) delegate to BDK.
+	pub(crate) bdk_wallet: Option<Arc<crate::bdk_wallet::BdkOnchainWallet>>,
 }
 
 impl BlockSource for BitcoindClient {
@@ -109,6 +113,8 @@ impl BitcoindClient {
 			fees: Arc::new(fees),
 			main_runtime_handle: handle.clone(),
 			logger,
+			esplora: None,
+			bdk_wallet: None,
 		};
 		BitcoindClient::poll_for_fee_estimates(
 			client.fees.clone(),
@@ -308,6 +314,9 @@ impl BitcoindClient {
 	}
 
 	pub async fn get_wallet_balance_sats(&self) -> u64 {
+		if let Some(ref bdk) = self.bdk_wallet {
+			return bdk.balance_sats();
+		}
 		match self
 			.bitcoind_rpc_client
 			.call_method::<crate::convert::WalletBalance>("getbalance", &vec![])
@@ -325,6 +334,18 @@ impl BitcoindClient {
 		}
 	}
 
+	/// Attach Esplora + BDK backends for operating without bitcoind wallet.
+	/// Call after construction. The BitcoindClient still uses bitcoind for block sync,
+	/// but broadcasts, fees, and wallet ops go through Esplora+BDK.
+	pub fn set_esplora_backend(
+		&mut self, esplora: Arc<crate::esplora::EsploraClient>,
+		bdk_wallet: Arc<crate::bdk_wallet::BdkOnchainWallet>,
+	) {
+		self.esplora = Some(esplora);
+		self.bdk_wallet = Some(bdk_wallet);
+		println!("Esplora+BDK backend enabled — wallet ops bypass bitcoind");
+	}
+
 	pub fn list_unspent(&self) -> impl Future<Output = ListUnspentResponse> {
 		let rpc_client = self.get_new_rpc_client();
 		async move {
@@ -335,12 +356,19 @@ impl BitcoindClient {
 
 impl FeeEstimator for BitcoindClient {
 	fn get_est_sat_per_1000_weight(&self, confirmation_target: ConfirmationTarget) -> u32 {
+		if let Some(ref esplora) = self.esplora {
+			return esplora.get_est_sat_per_1000_weight(confirmation_target);
+		}
 		self.fees.get(&confirmation_target).unwrap().load(Ordering::Acquire)
 	}
 }
 
 impl BroadcasterInterface for BitcoindClient {
 	fn broadcast_transactions(&self, txs: &[&Transaction]) {
+		if let Some(ref esplora) = self.esplora {
+			esplora.broadcast_transactions(txs);
+			return;
+		}
 		// As of Bitcoin Core 28, using `submitpackage` allows us to broadcast multiple
 		// transactions at once and have them propagate through the network as a whole, avoiding
 		// some pitfalls with anchor channels where the first transaction doesn't make it into the
@@ -382,12 +410,18 @@ impl BroadcasterInterface for BitcoindClient {
 
 impl ChangeDestinationSource for BitcoindClient {
 	fn get_change_destination_script<'a>(&'a self) -> AsyncResult<'a, ScriptBuf, ()> {
+		if let Some(ref bdk) = self.bdk_wallet {
+			return bdk.get_change_destination_script();
+		}
 		Box::pin(async move { Ok(self.get_new_address().await.script_pubkey()) })
 	}
 }
 
 impl WalletSource for BitcoindClient {
 	fn list_confirmed_utxos<'a>(&'a self) -> AsyncResult<'a, Vec<Utxo>, ()> {
+		if let Some(ref bdk) = self.bdk_wallet {
+			return bdk.list_confirmed_utxos();
+		}
 		Box::pin(async move {
 			let utxos = self.list_unspent().await.0;
 			Ok(utxos
@@ -423,10 +457,16 @@ impl WalletSource for BitcoindClient {
 	}
 
 	fn get_change_script<'a>(&'a self) -> AsyncResult<'a, ScriptBuf, ()> {
+		if let Some(ref bdk) = self.bdk_wallet {
+			return bdk.get_change_script();
+		}
 		Box::pin(async move { Ok(self.get_new_address().await.script_pubkey()) })
 	}
 
 	fn sign_psbt<'a>(&'a self, tx: Psbt) -> AsyncResult<'a, Transaction, ()> {
+		if let Some(ref bdk) = self.bdk_wallet {
+			return bdk.sign_psbt(tx);
+		}
 		Box::pin(async move {
 			let mut tx_bytes = Vec::new();
 			let _ = tx.unsigned_tx.consensus_encode(&mut tx_bytes).map_err(|_| ());

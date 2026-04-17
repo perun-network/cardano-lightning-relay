@@ -85,8 +85,8 @@ async fn start_ldk() {
 	// Step 1: Initialize the Logger
 	let logger = Arc::new(FilesystemLogger::new(ldk_data_dir.clone()));
 
-	// Initialize our bitcoind client.
-	let bitcoind_client = match BitcoindClient::new(
+	// Initialize our bitcoind client (still needed for block sync even in Esplora mode).
+	let mut bitcoind_client_inner = match BitcoindClient::new(
 		args.bitcoind_rpc_host.clone(),
 		args.bitcoind_rpc_port,
 		args.bitcoind_rpc_username.clone(),
@@ -97,12 +97,61 @@ async fn start_ldk() {
 	)
 	.await
 	{
-		Ok(client) => Arc::new(client),
+		Ok(client) => client,
 		Err(e) => {
 			println!("Failed to connect to bitcoind client: {}", e);
 			return;
 		},
 	};
+
+	// If BITCOIN_ESPLORA_URL is set, delegate TX broadcast + fees + wallet to Esplora+BDK.
+	// Block sync still uses bitcoind (for now). This lets us operate on Signet without
+	// relying on bitcoind's wallet.
+	if let Ok(esplora_url) = std::env::var("BITCOIN_ESPLORA_URL") {
+		let seed_path = std::env::var("BITCOIN_WALLET_SEED_PATH")
+			.unwrap_or_else(|_| format!("{}/wallet_seed.txt", ldk_data_dir));
+		println!("Esplora backend: {}", esplora_url);
+		println!("BDK wallet seed: {}", seed_path);
+
+		let esplora = match crate::esplora::EsploraClient::new(
+			esplora_url, Arc::clone(&logger),
+		).await {
+			Ok(c) => Arc::new(c),
+			Err(e) => { println!("ERROR: Esplora init failed: {}", e); return; },
+		};
+
+		let bdk = match crate::bdk_wallet::BdkOnchainWallet::new(
+			&seed_path, args.network, &esplora.base_url(), Arc::clone(&logger),
+		) {
+			Ok(w) => Arc::new(w),
+			Err(e) => { println!("ERROR: BDK wallet init failed: {}", e); return; },
+		};
+
+		// Initial wallet sync
+		if let Err(e) = bdk.sync().await {
+			println!("WARNING: initial BDK wallet sync failed: {}", e);
+		}
+
+		// Start periodic BDK sync (every 30s) + fee update (every 60s)
+		let bdk_sync = Arc::clone(&bdk);
+		let esplora_fees = Arc::clone(&esplora);
+		tokio::spawn(async move {
+			let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+			let mut fee_counter = 0u32;
+			loop {
+				interval.tick().await;
+				let _ = bdk_sync.sync().await;
+				fee_counter += 1;
+				if fee_counter % 2 == 0 {
+					esplora_fees.update_fee_estimates().await;
+				}
+			}
+		});
+
+		bitcoind_client_inner.set_esplora_backend(esplora, bdk);
+	}
+
+	let bitcoind_client = Arc::new(bitcoind_client_inner);
 
 	// Check that the bitcoind we've connected to is running the network we expect
 	let bitcoind_chain = bitcoind_client.get_blockchain_info().await.chain;
@@ -240,6 +289,15 @@ async fn start_ldk() {
 	user_config.channel_handshake_limits.force_announced_channel_preference = false;
 	user_config.channel_handshake_config.negotiate_anchors_zero_fee_htlc_tx = true;
 	user_config.manually_accept_inbound_channels = true;
+	// For testing on Signet: accept channels after 1 confirmation instead of 6.
+	let min_depth: u32 = std::env::var("LDK_MIN_CHANNEL_CONFIRMATIONS")
+		.ok()
+		.and_then(|s| s.parse().ok())
+		.unwrap_or(6);
+	if min_depth != 6 {
+		user_config.channel_handshake_config.minimum_depth = min_depth;
+		println!("Channel minimum confirmations: {}", min_depth);
+	}
 	let mut restarting_node = true;
 	let (channel_manager_blockhash, channel_manager) = {
 		if let Ok(f) = fs::File::open(format!("{}/manager", ldk_data_dir.clone())) {

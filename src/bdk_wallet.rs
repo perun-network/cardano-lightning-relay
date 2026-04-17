@@ -203,6 +203,49 @@ mod tests {
 	use super::*;
 
 	#[tokio::test]
+	async fn test_bdk_wallet_funded_on_signet() {
+		// This test verifies end-to-end: BDK wallet syncs via Esplora and sees
+		// funds that were sent from our bitcoind Signet wallet.
+		// Pre-requisite: send some sBTC to the BDK address first.
+		let seed_path = "/tmp/test_bdk_seed.txt";
+		if !Path::new(seed_path).exists() {
+			println!("SKIP: no seed at {} — run test_bdk_wallet_creation first", seed_path);
+			return;
+		}
+
+		let ldk_data_dir = "/tmp/test_bdk_funded".to_string();
+		std::fs::create_dir_all(format!("{}/.ldk/logs", ldk_data_dir)).ok();
+		let logger = Arc::new(crate::disk::FilesystemLogger::new(ldk_data_dir));
+
+		let wallet = BdkOnchainWallet::new(
+			seed_path,
+			Network::Signet,
+			"https://mempool.space/signet/api",
+			logger,
+		)
+		.expect("should load wallet");
+
+		wallet.sync().await.expect("sync should succeed");
+		let balance = wallet.balance_sats();
+		println!("BDK wallet balance after sync: {} sats", balance);
+
+		if balance > 0 {
+			println!("PASS: BDK wallet has funds on Signet ({})", balance);
+
+			// Test WalletSource trait
+			use lightning::events::bump_transaction::WalletSource;
+			let utxos = wallet.list_confirmed_utxos().await.expect("should list utxos");
+			println!("Confirmed UTXOs: {}", utxos.len());
+			for u in &utxos {
+				println!("  {}:{} = {} sats", u.outpoint.txid, u.outpoint.vout, u.output.value);
+			}
+			assert!(!utxos.is_empty(), "should have at least one UTXO");
+		} else {
+			println!("INFO: BDK wallet has 0 balance — send sBTC to {} first", wallet.new_address());
+		}
+	}
+
+	#[tokio::test]
 	async fn test_bdk_wallet_creation() {
 		let seed_path = "/tmp/test_bdk_seed.txt";
 		let _ = std::fs::remove_file(seed_path);

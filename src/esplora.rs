@@ -83,6 +83,11 @@ impl EsploraClient {
 		Ok(client)
 	}
 
+	/// Return the base URL for this client.
+	pub fn base_url(&self) -> &str {
+		&self.base_url
+	}
+
 	/// Fetch fee estimates from Esplora and update cached values.
 	pub async fn update_fee_estimates(&self) {
 		let url = format!("{}/fee-estimates", self.base_url);
