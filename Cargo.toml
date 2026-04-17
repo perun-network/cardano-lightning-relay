@@ -16,6 +16,7 @@ cardano-lightning-client = { path = "../cardano-lightning-client" }
 
 lightning = { version = "0.2.0", features = ["dnssec"] }
 lightning-block-sync = { version = "0.2.0", features = [ "rpc-client", "tokio" ] }
+lightning-transaction-sync = { version = "0.2.0", features = ["esplora-async-https", "time"] }
 lightning-dns-resolver = { version = "0.3.0" }
 lightning-invoice = { version = "0.34.0", features = ["std"] }
 lightning-net-tokio = { version = "0.2.0" }
@@ -39,6 +40,8 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 tokio = { version = "1", features = [ "io-util", "macros", "rt", "rt-multi-thread", "sync", "net", "time", "io-std" ] }
+esplora-client = { version = "0.12", default-features = false, features = ["tokio", "async-https-rustls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

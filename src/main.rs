@@ -8,6 +8,7 @@ mod cardano_swap;
 mod cli;
 mod convert;
 mod disk;
+mod esplora;
 mod events;
 mod helpers;
 mod hex_utils;
