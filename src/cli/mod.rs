@@ -5,9 +5,10 @@ pub(crate) mod peer_cmds;
 
 use crate::disk::{INBOUND_PAYMENTS_FNAME, OUTBOUND_PAYMENTS_FNAME};
 use crate::hex_utils;
+use crate::bitcoind_client::BitcoindClient;
 use crate::types::{
 	ChainMonitor, ChannelManager, HTLCStatus, InboundPaymentInfoStorage, MillisatAmount,
-	NetworkGraph, OutboundPaymentInfoStorage, PaymentInfo, PeerManager,
+	NetworkGraph, OutboundPaymentInfoStorage, OutputSweeper, PaymentInfo, PeerManager,
 };
 use bitcoin::secp256k1::PublicKey;
 use cardano_lightning_client::OperatorAgent;
@@ -74,7 +75,8 @@ pub(crate) async fn poll_for_user_input(
 	chain_monitor: Arc<ChainMonitor>, keys_manager: Arc<KeysManager>,
 	network_graph: Arc<NetworkGraph>, inbound_payments: Arc<Mutex<InboundPaymentInfoStorage>>,
 	outbound_payments: Arc<Mutex<OutboundPaymentInfoStorage>>, fs_store: Arc<FilesystemStore>,
-	operator_agent: Option<Arc<OperatorAgent>>,
+	operator_agent: Option<Arc<OperatorAgent>>, output_sweeper: Arc<OutputSweeper>,
+	bitcoind_client: Arc<BitcoindClient>,
 ) {
 	println!(
 		"LDK startup successful. Enter \"help\" to view available commands. Press Ctrl-D to quit."
@@ -592,6 +594,9 @@ pub(crate) async fn poll_for_user_input(
 						println!("ERROR: Cardano not enabled. Set CARDANO_ENABLED=true with required env vars.");
 					}
 				},
+				"getbalance" => {
+					print_balance(&channel_manager, &output_sweeper, &bitcoind_client, operator_agent.as_ref()).await;
+				},
 				"cardano-deposit" => {
 					if let Some(ref op) = operator_agent {
 						let amount_str = words.next();
@@ -679,6 +684,7 @@ fn help() {
 	println!("      getoffer [<amt_msats>]");
 	println!("\n  Cardano (requires CARDANO_ENABLED=true):");
 	println!("      pool-info");
+	println!("      getbalance  (BTC + cBTC balances held by this relay)");
 	println!("      cardano-deposit <cbtc_amount>");
 	println!("      cardano-withdraw <cbtc_amount>");
 	println!("      cancel-expired");
@@ -686,4 +692,82 @@ fn help() {
 	println!("\n  Other:");
 	println!("      signmessage <message>");
 	println!("      nodeinfo");
+}
+
+/// Print a summary of all BTC and cBTC balances held by this relay.
+///
+/// BTC side:
+///   - Channel balances (outbound + inbound per channel)
+///   - Post-close on-chain BTC tracked by OutputSweeper
+///
+/// cBTC side:
+///   - On-chain contract pool state (if CARDANO_ENABLED)
+async fn print_balance(
+	channel_manager: &Arc<ChannelManager>, output_sweeper: &Arc<OutputSweeper>,
+	bitcoind_client: &Arc<BitcoindClient>, operator_agent: Option<&Arc<OperatorAgent>>,
+) {
+	println!("Balance:");
+	println!("  BTC (Lightning side):");
+	let channels = channel_manager.list_channels();
+	let mut total_out: u64 = 0;
+	let mut total_in: u64 = 0;
+	if channels.is_empty() {
+		println!("    No open channels");
+	} else {
+		for c in &channels {
+			total_out += c.outbound_capacity_msat;
+			total_in += c.inbound_capacity_msat;
+			println!("    Channel {}:", c.channel_id);
+			println!("      peer:              {}", c.counterparty.node_id);
+			println!("      ready:             {}", c.is_channel_ready);
+			println!("      capacity:          {} sats", c.channel_value_satoshis);
+			println!("      outbound:          {} msat", c.outbound_capacity_msat);
+			println!("      inbound:           {} msat", c.inbound_capacity_msat);
+		}
+		println!("    Total outbound:      {} msat ({} sats)", total_out, total_out / 1000);
+		println!("    Total inbound:       {} msat ({} sats)", total_in, total_in / 1000);
+	}
+
+	// Post-close on-chain BTC tracked by the sweeper (broken down by spend status).
+	let tracked = output_sweeper.tracked_spendable_outputs();
+	let (mut pending, mut confirmed) = (0u64, 0u64);
+	for o in &tracked {
+		use lightning::sign::SpendableOutputDescriptor;
+		let v = match &o.descriptor {
+			SpendableOutputDescriptor::StaticOutput { output, .. } => output.value.to_sat(),
+			SpendableOutputDescriptor::DelayedPaymentOutput(d) => d.output.value.to_sat(),
+			SpendableOutputDescriptor::StaticPaymentOutput(s) => s.output.value.to_sat(),
+		};
+		use lightning::util::sweep::OutputSpendStatus;
+		match o.status {
+			OutputSpendStatus::PendingThresholdConfirmations { .. } => confirmed += v,
+			_ => pending += v,
+		}
+	}
+	println!("  BTC (on-chain, post-close sweeper):");
+	println!("    tracked outputs:     {}", tracked.len());
+	println!("    pending sats:        {} (spend TX not yet confirmed)", pending);
+	println!("    confirmed sats:      {} (swept, awaiting prune delay)", confirmed);
+	println!("    total sats:          {}", pending + confirmed);
+
+	// Full bitcoind wallet balance (includes swept outputs + pre-channel funding)
+	let wallet_sats = bitcoind_client.get_wallet_balance_sats().await;
+	println!("  BTC (bitcoind wallet — full on-chain balance):");
+	println!("    confirmed sats:      {}", wallet_sats);
+
+	// cBTC contract state.
+	println!("  cBTC (Cardano contract pool):");
+	match operator_agent {
+		Some(op) => match op.agent().query_state().await {
+			Ok(s) => {
+				println!("    total_liquidity:     {}", s.total_liquidity);
+				println!("    reserved:            {}", s.reserved);
+				println!("    available:           {}", s.available());
+				println!("    active_invoices:     {}", s.invoices.len());
+				println!("    active_offramps:     {}", s.offramps.len());
+			},
+			Err(e) => println!("    ERROR: failed to query pool: {}", e),
+		},
+		None => println!("    (Cardano not enabled)"),
+	}
 }

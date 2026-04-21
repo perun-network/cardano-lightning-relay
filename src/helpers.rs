@@ -1,5 +1,54 @@
 use crate::cardano_ops::CardanoOperator;
+use cardano_lightning_client::CardanoError;
+use std::future::Future;
 use std::time::Duration;
+
+/// Returns true if the error string represents a transient submission failure
+/// that should be retried — typically caused by Blockfrost indexing lag where
+/// the relay built a TX referencing a UTxO that was just consumed.
+pub(crate) fn is_retryable_submit_err(err_str: &str) -> bool {
+	err_str.contains("BadInputs")
+		|| err_str.contains("already been included")
+		|| err_str.contains("ConwayMempoolFailure")
+}
+
+/// Build + submit a contract TX with retry on transient Blockfrost-lag errors.
+///
+/// `build_and_submit` is invoked up to `max_attempts` times. Between attempts we
+/// sleep `delay` (gives Blockfrost time to index the previous on-chain TX so the
+/// next build sees fresh UTxO state).
+///
+/// Returns Ok on first success. Returns Err immediately on a non-retryable error.
+/// Returns Err after exhausting attempts on a retryable error.
+pub(crate) async fn submit_contract_tx_with_retry<F, Fut, T>(
+	context: &str, max_attempts: u32, delay: Duration, build_and_submit: F,
+) -> Result<T, String>
+where
+	F: Fn() -> Fut,
+	Fut: Future<Output = Result<T, CardanoError>>,
+{
+	let mut last_err = String::new();
+	for attempt in 0..max_attempts {
+		if attempt > 0 {
+			println!(
+				"{}: retry {}/{} (waiting {}s for Blockfrost indexing)...",
+				context, attempt + 1, max_attempts, delay.as_secs(),
+			);
+			tokio::time::sleep(delay).await;
+		}
+		match build_and_submit().await {
+			Ok(result) => return Ok(result),
+			Err(e) => {
+				let err_str = format!("{}", e);
+				last_err = err_str.clone();
+				if !is_retryable_submit_err(&err_str) {
+					return Err(format!("{}: non-retryable error: {}", context, err_str));
+				}
+			},
+		}
+	}
+	Err(format!("{}: failed after {} attempts: {}", context, max_attempts, last_err))
+}
 
 pub(crate) fn current_timestamp_ms() -> i64 {
 	std::time::SystemTime::now()

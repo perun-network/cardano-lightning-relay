@@ -10,7 +10,7 @@
 use crate::cardano_ops::CardanoOperator;
 use crate::cardano_swap::address_to_pkh;
 use crate::cli::payment_cmds;
-use crate::helpers::{current_timestamp_ms, query_state_with_retry};
+use crate::helpers::{current_timestamp_ms, query_state_with_retry, submit_contract_tx_with_retry};
 use crate::mapping::{OfframpMapping, OfframpStatus, SwapDb};
 use crate::types::{ChannelManager, OutboundPaymentInfoStorage};
 use cardano_lightning_client::OperatorAgent;
@@ -76,16 +76,19 @@ pub(crate) async fn request_offramp(
 	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + expiry_ms;
 
-	// 4. Submit CreateOfframp TX on-chain
-	let (offramp_id, signed_tx) = operator
-		.create_offramp(amount_cbtc, &payment_hash, &refund_pkh, expires_at)
-		.await
-		.map_err(|e| format!("failed to build CreateOfframp tx: {}", e))?;
-
-	let create_tx_hash = operator
-		.submit_tx(&signed_tx)
-		.await
-		.map_err(|e| format!("failed to submit CreateOfframp tx: {}", e))?;
+	// 4. Submit CreateOfframp TX on-chain (retry on transient Blockfrost-lag errors)
+	let (offramp_id, create_tx_hash) = submit_contract_tx_with_retry(
+		"CreateOfframp",
+		3,
+		std::time::Duration::from_secs(15),
+		|| async {
+			let (id, tx) = operator.create_offramp(amount_cbtc, &payment_hash, &refund_pkh, expires_at).await?;
+			let hash = operator.submit_tx(&tx).await?;
+			Ok((id, hash))
+		},
+	)
+	.await
+	.map_err(|e| format!("failed to create offramp on Cardano: {}", e))?;
 
 	println!(
 		"Offramp #{}: CreateOfframp TX submitted (hash: {})",
@@ -248,8 +251,8 @@ pub(crate) async fn complete_offramp(
 	let offramp_id = mapping.offramp_id;
 	let offramp = match query_state_with_retry(
 		&*operator,
-		6,
-		std::time::Duration::from_secs(5),
+		24,
+		std::time::Duration::from_secs(10),
 		&format!("Offramp #{}", offramp_id),
 		|state| state.offramps.iter().find(|o| o.offramp_id == offramp_id).cloned(),
 	)
@@ -266,20 +269,19 @@ pub(crate) async fn complete_offramp(
 		},
 	};
 
-	// Build and submit FulfillOfframp TX
-	let signed_tx = match operator.fulfill_offramp(&offramp).await {
-		Ok(tx) => tx,
-		Err(e) => {
-			let msg = format!("failed to build FulfillOfframp tx: {}", e);
-			println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
-			swap_db.update_offramp_status(
-				mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
-			);
-			return;
+	// Build and submit FulfillOfframp TX (retry on transient Blockfrost-lag errors)
+	let result = submit_contract_tx_with_retry(
+		&format!("FulfillOfframp(#{})", mapping.offramp_id),
+		3,
+		std::time::Duration::from_secs(15),
+		|| async {
+			let signed_tx = operator.fulfill_offramp(&offramp).await?;
+			operator.submit_tx(&signed_tx).await
 		},
-	};
+	)
+	.await;
 
-	match operator.submit_tx(&signed_tx).await {
+	match result {
 		Ok(tx_hash) => {
 			println!(
 				"SUCCESS: Offramp #{} completed, FulfillOfframp TX: {}",
@@ -290,10 +292,9 @@ pub(crate) async fn complete_offramp(
 			);
 		},
 		Err(e) => {
-			let msg = format!("failed to submit FulfillOfframp tx: {}", e);
-			println!("ERROR: Offramp #{}: {}", mapping.offramp_id, msg);
+			println!("ERROR: Offramp #{}: {}", mapping.offramp_id, e);
 			swap_db.update_offramp_status(
-				mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&msg),
+				mapping.offramp_id, OfframpStatus::Failed, None, None, Some(&e),
 			);
 		},
 	}

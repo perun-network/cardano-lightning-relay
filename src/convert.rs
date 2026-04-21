@@ -148,3 +148,22 @@ impl TryInto<ListUnspentResponse> for JsonResponse {
 		Ok(ListUnspentResponse(utxos))
 	}
 }
+
+/// Response from `getbalance` — a single float (BTC), converted to satoshis.
+pub struct WalletBalance {
+	pub confirmed_sats: u64,
+}
+
+impl TryInto<WalletBalance> for JsonResponse {
+	type Error = std::io::Error;
+	fn try_into(self) -> Result<WalletBalance, Self::Error> {
+		let btc = self.0.as_f64().ok_or_else(|| {
+			std::io::Error::new(std::io::ErrorKind::InvalidData, "getbalance did not return a number")
+		})?;
+		Ok(WalletBalance {
+			confirmed_sats: bitcoin::Amount::from_btc(btc)
+				.map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+				.to_sat(),
+		})
+	}
+}

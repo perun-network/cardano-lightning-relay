@@ -5,9 +5,10 @@
 //! LM invoice and sending cBTC to the user's Cardano address.
 
 use crate::cardano_ops::CardanoOperator;
-use crate::helpers::{current_timestamp_ms, query_state_with_retry};
+use crate::helpers::{current_timestamp_ms, query_state_with_retry, submit_contract_tx_with_retry};
 use crate::mapping::{SwapDb, SwapMapping, SwapStatus};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Swap description prefix used in BOLT11 invoices for swap detection.
 const SWAP_PREFIX: &str = "cBTC_SWAP:";
@@ -34,16 +35,19 @@ pub(crate) async fn request_swap(
 	let now_ms = current_timestamp_ms();
 	let expires_at = now_ms + expiry_ms;
 
-	// Create LM invoice on Cardano
-	let (invoice_id, signed_tx) = operator
-		.create_invoice(amount_cbtc, &owner_pkh, now_ms, expires_at)
-		.await
-		.map_err(|e| format!("failed to build create_invoice tx: {}", e))?;
-
-	let tx_hash = operator
-		.submit_tx(&signed_tx)
-		.await
-		.map_err(|e| format!("failed to submit create_invoice tx: {}", e))?;
+	// Create LM invoice on Cardano (retry on transient Blockfrost-lag errors)
+	let (invoice_id, tx_hash) = submit_contract_tx_with_retry(
+		"CreateInvoice",
+		3,
+		Duration::from_secs(15),
+		|| async {
+			let (id, tx) = operator.create_invoice(amount_cbtc, &owner_pkh, now_ms, expires_at).await?;
+			let hash = operator.submit_tx(&tx).await?;
+			Ok((id, hash))
+		},
+	)
+	.await
+	.map_err(|e| format!("failed to create invoice on Cardano: {}", e))?;
 
 	println!("Created LM invoice #{} on Cardano (tx: {})", invoice_id, tx_hash);
 
@@ -107,8 +111,8 @@ pub(crate) async fn fulfill_swap(
 	let invoice_id = mapping.invoice_id;
 	let invoice = match query_state_with_retry(
 		&*operator,
-		12,
-		std::time::Duration::from_secs(5),
+		24,
+		std::time::Duration::from_secs(10),
 		&format!("LM invoice #{}", invoice_id),
 		|state| state.invoices.iter().find(|i| i.invoice_id == invoice_id).cloned(),
 	)
@@ -122,23 +126,25 @@ pub(crate) async fn fulfill_swap(
 		},
 	};
 
-	// Build and submit the FulfillInvoice tx
-	let signed_tx = match operator.fulfill_invoice(&invoice, &mapping.cardano_address).await {
-		Ok(tx) => tx,
-		Err(e) => {
-			println!("ERROR: failed to build fulfill_invoice tx for swap {}: {}", payment_hash, e);
-			swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
-			return;
+	// Build and submit the FulfillInvoice tx (retry on transient Blockfrost-lag errors)
+	let result = submit_contract_tx_with_retry(
+		&format!("FulfillInvoice({})", &payment_hash[..16]),
+		3,
+		Duration::from_secs(15),
+		|| async {
+			let signed_tx = operator.fulfill_invoice(&invoice, &mapping.cardano_address).await?;
+			operator.submit_tx(&signed_tx).await
 		},
-	};
+	)
+	.await;
 
-	match operator.submit_tx(&signed_tx).await {
+	match result {
 		Ok(tx_hash) => {
 			println!("SUCCESS: swap {} fulfilled, cBTC sent to {}, tx: {}", payment_hash, mapping.cardano_address, tx_hash);
 			swap_db.update_status(&payment_hash, SwapStatus::Completed, Some(&tx_hash));
 		},
 		Err(e) => {
-			println!("ERROR: failed to submit fulfill_invoice tx for swap {}: {}", payment_hash, e);
+			println!("ERROR: swap {} failed: {}", payment_hash, e);
 			swap_db.update_status(&payment_hash, SwapStatus::Failed, None);
 		},
 	}

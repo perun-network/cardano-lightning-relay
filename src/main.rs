@@ -7,7 +7,9 @@ mod cardano_ops;
 mod cardano_swap;
 mod cli;
 mod convert;
+mod bdk_wallet;
 mod disk;
+mod esplora;
 mod events;
 mod helpers;
 mod hex_utils;
@@ -83,8 +85,8 @@ async fn start_ldk() {
 	// Step 1: Initialize the Logger
 	let logger = Arc::new(FilesystemLogger::new(ldk_data_dir.clone()));
 
-	// Initialize our bitcoind client.
-	let bitcoind_client = match BitcoindClient::new(
+	// Initialize our bitcoind client (still needed for block sync even in Esplora mode).
+	let mut bitcoind_client_inner = match BitcoindClient::new(
 		args.bitcoind_rpc_host.clone(),
 		args.bitcoind_rpc_port,
 		args.bitcoind_rpc_username.clone(),
@@ -95,12 +97,61 @@ async fn start_ldk() {
 	)
 	.await
 	{
-		Ok(client) => Arc::new(client),
+		Ok(client) => client,
 		Err(e) => {
 			println!("Failed to connect to bitcoind client: {}", e);
 			return;
 		},
 	};
+
+	// If BITCOIN_ESPLORA_URL is set, delegate TX broadcast + fees + wallet to Esplora+BDK.
+	// Block sync still uses bitcoind (for now). This lets us operate on Signet without
+	// relying on bitcoind's wallet.
+	if let Ok(esplora_url) = std::env::var("BITCOIN_ESPLORA_URL") {
+		let seed_path = std::env::var("BITCOIN_WALLET_SEED_PATH")
+			.unwrap_or_else(|_| format!("{}/wallet_seed.txt", ldk_data_dir));
+		println!("Esplora backend: {}", esplora_url);
+		println!("BDK wallet seed: {}", seed_path);
+
+		let esplora = match crate::esplora::EsploraClient::new(
+			esplora_url, Arc::clone(&logger),
+		).await {
+			Ok(c) => Arc::new(c),
+			Err(e) => { println!("ERROR: Esplora init failed: {}", e); return; },
+		};
+
+		let bdk = match crate::bdk_wallet::BdkOnchainWallet::new(
+			&seed_path, args.network, &esplora.base_url(), Arc::clone(&logger),
+		) {
+			Ok(w) => Arc::new(w),
+			Err(e) => { println!("ERROR: BDK wallet init failed: {}", e); return; },
+		};
+
+		// Initial wallet sync
+		if let Err(e) = bdk.sync().await {
+			println!("WARNING: initial BDK wallet sync failed: {}", e);
+		}
+
+		// Start periodic BDK sync (every 30s) + fee update (every 60s)
+		let bdk_sync = Arc::clone(&bdk);
+		let esplora_fees = Arc::clone(&esplora);
+		tokio::spawn(async move {
+			let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+			let mut fee_counter = 0u32;
+			loop {
+				interval.tick().await;
+				let _ = bdk_sync.sync().await;
+				fee_counter += 1;
+				if fee_counter % 2 == 0 {
+					esplora_fees.update_fee_estimates().await;
+				}
+			}
+		});
+
+		bitcoind_client_inner.set_esplora_backend(esplora, bdk);
+	}
+
+	let bitcoind_client = Arc::new(bitcoind_client_inner);
 
 	// Check that the bitcoind we've connected to is running the network we expect
 	let bitcoind_chain = bitcoind_client.get_blockchain_info().await.chain;
@@ -238,6 +289,15 @@ async fn start_ldk() {
 	user_config.channel_handshake_limits.force_announced_channel_preference = false;
 	user_config.channel_handshake_config.negotiate_anchors_zero_fee_htlc_tx = true;
 	user_config.manually_accept_inbound_channels = true;
+	// For testing on Signet: accept channels after 1 confirmation instead of 6.
+	let min_depth: u32 = std::env::var("LDK_MIN_CHANNEL_CONFIRMATIONS")
+		.ok()
+		.and_then(|s| s.parse().ok())
+		.unwrap_or(6);
+	if min_depth != 6 {
+		user_config.channel_handshake_config.minimum_depth = min_depth;
+		println!("Channel minimum confirmations: {}", min_depth);
+	}
 	let mut restarting_node = true;
 	let (channel_manager_blockhash, channel_manager) = {
 		if let Ok(f) = fs::File::open(format!("{}/manager", ldk_data_dir.clone())) {
@@ -696,6 +756,18 @@ async fn start_ldk() {
 		recovery::recover_depositing_offramps(op.as_ref(), db).await;
 	}
 
+	// Reconcile on-chain state: cancel expired invoices/offramps that were
+	// orphaned by prior relay restarts (not tracked in SQLite but still on-chain).
+	// Env var opt-in because it modifies contract state and takes 30+ seconds per entry.
+	if let Some(ref op) = operator_agent {
+		if std::env::var("CARDANO_RECONCILE_ON_STARTUP").unwrap_or_default() == "1" {
+			println!("Reconciling on-chain state (cancelling orphaned expired entries)...");
+			crate::cli::cardano_cmds::cancel_expired(op).await;
+			crate::cli::cardano_cmds::cancel_expired_offramps(op).await;
+			println!("Reconciliation complete.");
+		}
+	}
+
 	// Start expiry monitors for Cardano swaps and offramps
 	if let (Some(op), Some(db)) = (&operator_agent, &swap_db) {
 		tokio::spawn(background::monitor_expired_swaps(
@@ -734,16 +806,32 @@ async fn start_ldk() {
 		if swap_expiry_secs != 3600 {
 			println!("Swap/offramp expiry set to {} seconds", swap_expiry_secs);
 		}
+		// Rate limit: max requests per IP per window. Production-safe default
+		// (10/60s) is too strict for E2E tests and for a frontend that polls
+		// status after every action — override via env for dev/test.
+		let rate_limit_max: u32 = std::env::var("CARDANO_API_RATE_LIMIT_MAX")
+			.unwrap_or_else(|_| "10".into())
+			.parse()
+			.expect("CARDANO_API_RATE_LIMIT_MAX must be a number");
+		let rate_limit_window_secs: u64 = std::env::var("CARDANO_API_RATE_LIMIT_WINDOW_SECS")
+			.unwrap_or_else(|_| "60".into())
+			.parse()
+			.expect("CARDANO_API_RATE_LIMIT_WINDOW_SECS must be a number");
+		if rate_limit_max != 10 || rate_limit_window_secs != 60 {
+			println!("API rate limit: {} requests per {}s per IP", rate_limit_max, rate_limit_window_secs);
+		}
 		let api_state = api::ApiState {
 			operator: Arc::clone(op),
 			swap_db: Arc::clone(db),
 			channel_manager: Arc::clone(&channel_manager),
+			output_sweeper: Arc::clone(&output_sweeper),
+			bitcoind_client: Arc::clone(&bitcoind_client),
 			inbound_payments: Arc::clone(&inbound_payments),
 			outbound_payments: Arc::clone(&outbound_payments),
 			fs_store: Arc::clone(&fs_store),
 			auth_token,
 			rate_limiter: Arc::new(std::sync::Mutex::new(
-				api::RateLimiter::new(10, 60), // 10 requests per minute per IP
+				api::RateLimiter::new(rate_limit_max, rate_limit_window_secs),
 			)),
 			max_active_swaps,
 			max_active_offramps,
@@ -770,6 +858,8 @@ async fn start_ldk() {
 	let cli_chain_monitor = Arc::clone(&chain_monitor);
 	let cli_fs_store = Arc::clone(&fs_store);
 	let cli_peer_manager = Arc::clone(&peer_manager);
+	let cli_output_sweeper = Arc::clone(&output_sweeper);
+	let cli_bitcoind_client = Arc::clone(&bitcoind_client);
 	let cli_poll = tokio::task::spawn(cli::poll_for_user_input(
 		cli_peer_manager,
 		cli_channel_manager,
@@ -780,6 +870,8 @@ async fn start_ldk() {
 		outbound_payments,
 		cli_fs_store,
 		operator_agent,
+		cli_output_sweeper,
+		cli_bitcoind_client,
 	));
 
 	// Exit if either CLI polling exits or the background processor exits (which shouldn't happen

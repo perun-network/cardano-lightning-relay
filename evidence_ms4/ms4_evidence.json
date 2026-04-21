@@ -1,0 +1,276 @@
+{
+  "milestone": "MS4",
+  "network": {
+    "bitcoin": "signet",
+    "cardano": "preprod"
+  },
+  "timestamp": "2026-04-21T14:18:17.276978+00:00",
+  "channel": {
+    "channel_id": "0f7f1ae048c43a6cffb8298f1984324089307548b9df2b353d3831eb96d052eb",
+    "capacity_sats": 20000,
+    "payer_node_id": "031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392",
+    "relay_node_id": "03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b"
+  },
+  "addresses": {
+    "cardano_operator": "addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4",
+    "cardano_script": "addr_test1wqf2s47jetde0ne0n0u9vfrm04q363n5ycnzyupen5j20hqple0j8",
+    "cbtc_policy_id": "c1474e383d24055c747cdfbddb33223276e675bab82ba8969ac13a36",
+    "cbtc_asset_name": "63425443"
+  },
+  "pool": {
+    "initial_liquidity": 15801000,
+    "final_liquidity": 6301000,
+    "expected_final": 6301000
+  },
+  "onramps": [
+    {
+      "index": 1,
+      "payment_hash": "ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007",
+      "status": "Completed",
+      "lightning_preimage": "c5d01ee54dbc75eb10b4b644477a2605f95be0f54308f93a83f704c074b145ee",
+      "create_invoice_tx": "1a737be2f936b99cd1242fca0eec187f0c1542279c4f38d6b3686cee12155dda",
+      "fulfill_invoice_tx": "77e76bd12147fcfdfee330833b8bbae7b8f22b886ff452bc378822d85183a2e6",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 14801000
+    },
+    {
+      "index": 2,
+      "payment_hash": "29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a",
+      "status": "Completed",
+      "lightning_preimage": "b068bd8e23015ae5fd2c125ee9469e889d58788c9782eb00b6b8fe68440814cf",
+      "create_invoice_tx": "6a6a6746fea2e9f54a2fdb6f2aa2f5c3bc327d9a41c4e089bf47f3adc27110f1",
+      "fulfill_invoice_tx": "f2bbf5892e4ff85966443fdc7dc845133459db1d526c7548c9463256bb7152e5",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 13801000
+    },
+    {
+      "index": 3,
+      "payment_hash": "67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca",
+      "status": "Completed",
+      "lightning_preimage": "801c7a742e58ffd58f3f3a043c5991ee88d11563bcc61f50b6fc49d65e0e387d",
+      "create_invoice_tx": "bb39f3d03eff4befd80e9d0f919793914408234ffffccf6a120af06e8ca2c44b",
+      "fulfill_invoice_tx": "dee507ba0058296359d9bfd9aded4597943433697e9b98c6b153dc9923c0cf40",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 12801000
+    },
+    {
+      "index": 4,
+      "payment_hash": "ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a",
+      "status": "Completed",
+      "lightning_preimage": "2bca31391762d6e5896c7d9df1c8dfd0d3909a6b1294ca6349bbfa050312486a",
+      "create_invoice_tx": "a8e2e28cd07c0a3c87b6e4e945891d4dbbf9f3974b6b946695a2cbe9043bb66c",
+      "fulfill_invoice_tx": "bdbf438a00bf4f95e00a633e389d044628c8fce7c737e35d857e6fd5d5578cd9",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 11801000
+    },
+    {
+      "index": 5,
+      "payment_hash": "9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29",
+      "status": "Completed",
+      "lightning_preimage": "a836adc0ce077b2327c294fd990de2c2a289e9537fa0a48c069ad453d54042a0",
+      "create_invoice_tx": "eea3e8c3a4da4ede3ed8010d197891d22d0ce14e2d4c1892009a3a12b4aaf963",
+      "fulfill_invoice_tx": "2275501d94c14b8717170c42b4b1e9dc47f3b1a864405766c2d5777737800e0f",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 10801000
+    },
+    {
+      "index": 6,
+      "payment_hash": "3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65",
+      "status": "Completed",
+      "lightning_preimage": "239939b0702ad30fb166ea4ede2adc2acbccf09e9e53d2754775d68532bedbc7",
+      "create_invoice_tx": "0cfc45d04f5a8a48536edd7dfd7027c09bed1afad86d4ea7d3b6451e862cb400",
+      "fulfill_invoice_tx": "ae050d0816e63a82e4f583fe9ffb47cb64e11285be6b4b5256cda8ab128fe351",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 9801000
+    },
+    {
+      "index": 7,
+      "payment_hash": "d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2",
+      "status": "Completed",
+      "lightning_preimage": "21c38c9f62c28645e62a0142ed6470da76b1af38890c7af9044a2289126cf9a9",
+      "create_invoice_tx": "6dd9209ad616d30df5fca9381f5f990b26e76f1a86ffe8d6f300df5d678291aa",
+      "fulfill_invoice_tx": "a398205914942b1d67a50105b391439fc02f9cc0659fb6df353e0b38438e2e66",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 8801000
+    },
+    {
+      "index": 8,
+      "payment_hash": "1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c",
+      "status": "Completed",
+      "lightning_preimage": "5ce238f5e74364063e290892b4be40e9bbcb8152a2ccaec48885caa46de5771f",
+      "create_invoice_tx": "70805f5ad28735506623ab591c311389f9eca652ac243c2b6d8e088d143a1c93",
+      "fulfill_invoice_tx": "045396ff957295ad976642721bc76cc43ae0dde3f9c9c8326e23de7f37501bbe",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 7801000
+    },
+    {
+      "index": 9,
+      "payment_hash": "6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b",
+      "status": "Completed",
+      "lightning_preimage": "71dc8c79b171324de1d3fd53d83796e127255a054f87155277596537f704326f",
+      "create_invoice_tx": "65a0b3a2e695e8c72ac367ed3e182ab5a3dc8da212821b5f2cb05d50e0028842",
+      "fulfill_invoice_tx": "bf3e7a2304be066f20805c1e9e7fe780f3e3c6fb07c3ecb07d7bd52c10ddb3c9",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 6801000
+    },
+    {
+      "index": 10,
+      "payment_hash": "22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363",
+      "status": "Completed",
+      "lightning_preimage": "0d578893e338fc730e444f75377e5fa4c25d4e43a8fbe764df2e00fbbd9bb49c",
+      "create_invoice_tx": "1482000558f5ab851b753f9e2178418cf29cd29af66abaf703a070b01a6b831b",
+      "fulfill_invoice_tx": "e460bd09783ee503fb1d12a0b2f3012649ad677482bcb6cda87dd0b230b89f87",
+      "amount_cbtc": 1000000,
+      "amount_sats": 1000,
+      "pool_after": 5801000
+    }
+  ],
+  "offramps": [
+    {
+      "index": 1,
+      "offramp_id": 27,
+      "payment_hash": "b3913f22828172289c655ca3a8a931be5f1bad6797f75636c12cf7057570b460",
+      "status": "completed",
+      "lightning_preimage": "1f5ad24ee5ed0786d05ae012eca60dd47e86b3b4cccde725ddcbf911c400a4ff",
+      "cbtc_transfer_tx": "cc294d5e7d2637fd215aaaa81d92d9f25a02431eb198ccc888d82fcc2f1b3f42",
+      "create_offramp_tx": "62d5bb02adfecdc428cd40be2eaedda94629e325764c0f58503b5bd4b2b8a21f",
+      "fulfill_offramp_tx": "767f70578f74344b7d0b7c764ecd188f3aee4f31b1544c6b97ecbc6433cb0665",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 5851000
+    },
+    {
+      "index": 2,
+      "offramp_id": 28,
+      "payment_hash": "693d8121b67f9523d51d6cf89a0e6b98f6711396ebaa9e74eba4ee0b7241bfbd",
+      "status": "completed",
+      "lightning_preimage": "49102920733ca9832da507613051d3078bba5ee078f74d60ac2eede9ea9d85b9",
+      "cbtc_transfer_tx": "889e0e59c461b67396565536abe1a278be641b0035ee626f984b033129980c77",
+      "create_offramp_tx": "806c0018d32826b5d355fec4cceb784fddf70203a2ab084d627534f13fb67231",
+      "fulfill_offramp_tx": "f536fe4dcb224260237193bca2e3daaafdbf43ea5904a2ed63f15c96f8c2e337",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 5901000
+    },
+    {
+      "index": 3,
+      "offramp_id": 29,
+      "payment_hash": "dec8732ef8b48422034d26e9f23675da659fe55ba50f8c4d69ee8aa9a794ea74",
+      "status": "completed",
+      "lightning_preimage": "7b83f620b8db344f8d86703db3edaa55e08f88aeeed4876076147927f68d033e",
+      "cbtc_transfer_tx": "3b3eb06019ab02d88ba3de10e0dd4de0ecdd3444b3a6b7c9a1cdd88b6b191d16",
+      "create_offramp_tx": "ea986c6eb57bc0ea6732785b5572642b37e86f0b9dee17675ae0872021f83448",
+      "fulfill_offramp_tx": "f672b84b87e6db331de97202a0c6791cf08054e01daa3266a2a1cab01bae4e88",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 5951000
+    },
+    {
+      "index": 4,
+      "offramp_id": 30,
+      "payment_hash": "864f0fc4eb47055584cf3a7a198f415bd981b112e5f45f4c470685e8d076e5cd",
+      "status": "completed",
+      "lightning_preimage": "9a640d781276d77a700c9043eb7be8b5e16ed07a06214670f0940458fc46448f",
+      "cbtc_transfer_tx": "b99812ac0c1773d00347233d85dc01d09edc6b2bc494fa1c169a5ea18f76c953",
+      "create_offramp_tx": "61f84fab790ddccb6ec68eb67c9d14e3d324005ef5582ed6e2f6d493aadc372c",
+      "fulfill_offramp_tx": "0aaaa20b9bd2dc78f8ab10ce61624d4c0d118e39aa7d5fb306b91b14f59fce5e",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6001000
+    },
+    {
+      "index": 5,
+      "offramp_id": 31,
+      "payment_hash": "f0647731a5bf14a5c20c41c31456f5b9391250b6d3e3d7a3a0d08db4a2f901f0",
+      "status": "completed",
+      "lightning_preimage": "4a5a55518a5469dd2b3a017d05bbd0d3dada32e322fb3999c6d2acaf651d2f5c",
+      "cbtc_transfer_tx": "de963b6e7228a41a70b292d656579a335f7c5834df4598b349eccb205c6e5078",
+      "create_offramp_tx": "54d130bc90e08a3fee11fdc6bdb2331be64a47e32facf7c044b76eb42ef0e354",
+      "fulfill_offramp_tx": "31bb7878652a75ff0e09884f5316d0475e1a0ce67359d99b2935084b2c232271",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6051000
+    },
+    {
+      "index": 6,
+      "offramp_id": 32,
+      "payment_hash": "e4ed0511b0611665c6c8ca4ebee069ef6820471313c7637ac0da1c5cdab5064c",
+      "status": "completed",
+      "lightning_preimage": "becc195ee64224cd80df558641622186a64bf0631fa16a3683ba9a6f3746ee3c",
+      "cbtc_transfer_tx": "abe11eacf5cb1395eb5e78a9d14a017c389a80c83e9eaabe2e49e025c9946871",
+      "create_offramp_tx": "89316cbba15474c78c65cc0c790188da26d35ea2803f8f5db006524d17b6d5ee",
+      "fulfill_offramp_tx": "1a2dcf2b5b5bc6da36633f268b2c58e156c78f5f972ac7981326b31b5c1d26e6",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6101000
+    },
+    {
+      "index": 7,
+      "offramp_id": 33,
+      "payment_hash": "8bb6fef4dd80fdb3eafeaf6551ff9873e7bade815218da170a973fae028813ae",
+      "status": "completed",
+      "lightning_preimage": "5395361b55554c90797a55c5c5fa2fceb7fa1c8a8a64cee67223dbe8cab29d9a",
+      "cbtc_transfer_tx": "e4b641d023d2684170cc8c9868e474f5b332b07e8f4ab1483fb7773b1ed287a5",
+      "create_offramp_tx": "c13f28a4fa8c6cba27e9e9d8cdb7e5ecebf90b2a52038ba8e024fd78e288196d",
+      "fulfill_offramp_tx": "0a388897323684b055b59523532b436e41a70aa7fee09d4aa0df3725f03748eb",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6151000
+    },
+    {
+      "index": 8,
+      "offramp_id": 34,
+      "payment_hash": "896bd34a1ea846440533e3a820fb0f09eb32ed734b5e84859d7d0a865f9dd415",
+      "status": "completed",
+      "lightning_preimage": "6fe1278c19c76ddc04833e2fe21e30cbcc805bbed3e444a85aeca5b0a1bef149",
+      "cbtc_transfer_tx": "d8819bf4b41564396a836d865f5ba928fd7023f56375da035f0ed3e8f3823ae9",
+      "create_offramp_tx": "7975dc4609f2698812028bff2d2c55192a350bedbbf564e700f7a3c1dbc35942",
+      "fulfill_offramp_tx": "b6b29cc72a14067a7eca61ae6dcb1d27b3fb4e64f8a720a75a51ca1bcf27bb4b",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6201000
+    },
+    {
+      "index": 9,
+      "offramp_id": 35,
+      "payment_hash": "4a920de700829224c7684ef9acbcd54932e3dcd9c9b54209ff854e851cc57455",
+      "status": "completed",
+      "lightning_preimage": "dadd92796775be34b7901718178e3347e1d54670f0223e66c10071fe6996441e",
+      "cbtc_transfer_tx": "f9df658dddde50e32ec3304490948579157fdbde4840968e0f6ade93cd437a81",
+      "create_offramp_tx": "44cd227a1de6e14a4f6cdc0d89d8bd609a60b7808dfb51e3201669bc1c673d75",
+      "fulfill_offramp_tx": "41f4160926d6d7fad1a031f8851eeee8fe72cdbff46dad09bb4b0e3aa8cd8131",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6251000
+    },
+    {
+      "index": 10,
+      "offramp_id": 36,
+      "payment_hash": "2b5cfe44d3fab343bdfdc506c4e35679ccd048b0edc973cdf62b3d16a442b9cd",
+      "status": "completed",
+      "lightning_preimage": "20fc54a4714006bc195aaaaabcfef49e2e753c02a7d9f16210a129169f4a6d42",
+      "cbtc_transfer_tx": "0eaf56423bda6e19ce413e11c441bbc2cea6ccf7f4524c077b661070d9f41467",
+      "create_offramp_tx": "96282385fb3f52fd737d80188e67ff499b7a0a863e064e70f98fd0ca77b4e22f",
+      "fulfill_offramp_tx": "56ba749f61c86babb113e1432deb1082220484230d9f03e6b74ada05c6719d62",
+      "amount_cbtc": 50000,
+      "amount_sats": 50,
+      "pool_after": 6301000
+    }
+  ],
+  "summary": {
+    "completed_onramps": 10,
+    "completed_offramps": 10,
+    "checks_passed": 53,
+    "checks_total": 53,
+    "all_passed": true
+  }
+}
