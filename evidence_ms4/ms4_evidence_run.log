@@ -1,0 +1,1250 @@
+==========================================
+  MS4 Evidence Collection
+  Signet ↔ Preprod — 10 onramps + 10 offramps
+==========================================
+
+Onramp amount:   1000000 cBTC (= 1000 sats) x 10
+Offramp amount:  50000 cBTC (= 50 sats) x 10
+Channel size:    20000 sats
+
+
+=== Validating prerequisites ===
+
+bitcoind signet: OK (tip=301046)
+signet 'user' wallet: OK
+Blockfrost key: OK
+Binaries: OK
+
+=== Extract config ===
+
+Operator address:  addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4
+Script address:    addr_test1wqf2s47jetde0ne0n0u9vfrm04q363n5ycnzyupen5j20hqple0j8
+cBTC policy:       c1474e383d24055c747cdfbddb33223276e675bab82ba8969ac13a36
+Script CBOR -> /tmp/ms4_script_cbor.hex (10298 hex chars)
+
+=== Ensure ADA-only collateral UTxOs ===
+
+ADA-only UTxOs (>= 5 ADA): 1
+Creating 9 additional collateral UTxOs (10 ADA each)...
+Waiting 30s for indexing...
+
+=== Start nodes (RESUME mode) ===
+
+LDK data preserved — nodes will reload channel state from disk
+spawn /home/ilja/pc-work/ldk-sample/target/release/ldk-sample __cookie__:14738747780aaca36709b8aff0ebc08dd8f07418c551c7f4e3bbbe849e166ea8@127.0.0.1:38332 /home/ilja/pc-work/ldk-sample/ldk_data_signet_offramp_payer 9736 signet
+LDK startup successful. Enter "help" to view available commands. Press Ctrl-D to quit.
+LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs
+Local Node ID is 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392.
+> Payer node ID: 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+spawn /home/ilja/pc-work/cardano-lightning-relay/target/release/cardano-lightning-relay __cookie__:14738747780aaca36709b8aff0ebc08dd8f07418c551c7f4e3bbbe849e166ea8@127.0.0.1:38332 /home/ilja/pc-work/cardano-lightning-relay/ldk_data_signet_offramp 9735 signet
+Esplora backend: https://mempool.space/signet/api
+BDK wallet seed: /home/ilja/pc-work/cardano-lightning-relay/signet_wallet_seed.txt
+Esplora connected: https://mempool.space/signet/api (tip height: 301046)
+BDK wallet initialized (network: Signet, first address: tb1q7tp0tdjf7jsgdgl4t06sgnfkrzd8ul33t0qlrq)
+Esplora+BDK backend enabled — wallet ops bypass bitcoind
+Channel minimum confirmations: 1
+Cardano operator agent initialized.
+WARNING: No CARDANO_API_AUTH_TOKEN set — /pool/deposit and /pool/withdraw are UNPROTECTED
+WARNING: Set CARDANO_API_AUTH_TOKEN to require bearer token authentication
+API rate limit: 1000 requests per 60s per IP
+Cardano swap API listening on port 3002
+LDK startup successful. Enter "help" to view available commands. Press Ctrl-D to quit.
+LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs
+Local Node ID is 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b.
+> Relay node ID: 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+
+=== Connect peers, verify channel ===
+
+
+EVENT: claimed payment from payment hash 26f30d9fb76b7e7def837be864db886fe58c627874d817b27d62ef78c2bcf62b of 50000 millisatoshis
+> connectpeer 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b@127.0.0.1:9735
+SUCCESS: connected to peer 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237bPeer connected
+
+> Waiting for existing channel to become ready...
+listchannels
+[
+	{
+		channel_id: 0f7f1ae048c43a6cffb8298f1984324089307548b9df2b353d3831eb96d052eb,
+		funding_txid: eb52d096eb31383d352bdfb948753089403284198f29b8ff6c3ac448e01a7f0f,
+		peer_pubkey: 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b,
+		short_channel_id: 330824357107007488,
+		is_channel_ready: true,
+		channel_value_satoshis: 20000,
+		outbound_capacity_msat: 13200000,
+		available_balance_for_send_msat: 13200000,
+		available_balance_for_recv_msat: 4800000,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ready after 5s
+listchannels
+[
+	{
+		channel_id: 0f7f1ae048c43a6cffb8298f1984324089307548b9df2b353d3831eb96d052eb,
+		funding_txid: eb52d096eb31383d352bdfb948753089403284198f29b8ff6c3ac448e01a7f0f,
+		peer_pubkey: 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b,
+		short_channel_id: 330824357107007488,
+		is_channel_ready: true,
+		channel_value_satoshis: 20000,
+		outbound_capacity_msat: 13200000,
+		available_balance_for_send_msat: 13200000,
+		available_balance_for_recv_msat: 4800000,
+		channel_can_send_payments: true,
+		public: false,
+	},
+]
+> Channel ID: 0f7f1ae048c43a6cffb8298f1984324089307548b9df2b353d3831eb96d052eb
+
+=== Clean up stale on-chain entries ===
+
+Pool available: 15801000 cBTC
+Pool liquidity sufficient for 10 onramps
+
+=== Initial pool state ===
+
+Initial pool total_liquidity: 15801000 cBTC
+Initial pool available:       15801000 cBTC
+
+==========================================
+  Onramp Swaps (10 x 1000000 cBTC)
+==========================================
+
+--- Onramp 1 / 10 ---
+
+Pool before: 15801000 cBTC
+Payment hash: ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007
+sendpayment lntbs10u1p57wlrsdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp54cax3uahvefx3w4wvhj0f25pm8medmuu5zp5dpnup0r2ty3e5qrssp5v9szr4tjhfgfqsmg2hytx86pe86q02rq8vlgchvegpqa4vgn6pjq9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfqcn9xvj8zk6u05ly6rxrv5l69xczrd6fy80xusw0n6qggnm8dp9kr57y4czdhrajuwu8s6sdkju8zjg0czwu443eka90gntfaj9584sqqgt9xvj
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007 with preimage c5d01ee54dbc75eb10b4b644477a2605f95be0f54308f93a83f704c074b145ee
+> PAYMENT SUCCESS (preimage: c5d01ee54dbc75eb...)
+  PASS O1-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Completed
+  CreateInvoice TX: 1a737be2f936b99cd1242fca0eec187f0c1542279c4f38d6b3686cee12155dda
+  FulfillInvoice TX: 77e76bd12147fcfdfee330833b8bbae7b8f22b886ff452bc378822d85183a2e6
+  PASS O1-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool unreserved after 10s
+  Pool after: 14801000 cBTC (change: -1000000)
+  PASS O1-3: pool decreased by 1000000
+  Onramp 1 done: hash=ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007 pool=14801000
+
+--- Onramp 2 / 10 ---
+
+Pool before: 14801000 cBTC
+Payment hash: 29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a
+sendpayment lntbs10u1p57wl9rdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp59x4tepjpndf6qkgrd80r53sg5we6zv67c2c96wes2ecfflhvee9qsp5z8lw37xtl88k83pyjmuaydrx0zw8py7q2sh3wppt00da25yvzz5q9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfql4tvkqkh7e2vtjfs4xafww33aq4c4r5fgzuspw0d8zcv7k62nphrpkczfp0flm5my3u34862l90h8ux8gj60zupdkzcsh3dj26mmz8qp6psyz4
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a with preimage b068bd8e23015ae5fd2c125ee9469e889d58788c9782eb00b6b8fe68440814cf
+> PAYMENT SUCCESS (preimage: b068bd8e23015ae5...)
+  PASS O2-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Fulfilling
+  Poll 7: status = Fulfilling
+  Poll 8: status = Fulfilling
+  Poll 9: status = Fulfilling
+  Poll 10: status = Fulfilling
+  Poll 11: status = Fulfilling
+  Poll 12: status = Fulfilling
+  Poll 13: status = Fulfilling
+  Poll 14: status = Fulfilling
+  Poll 15: status = Fulfilling
+  Poll 16: status = Fulfilling
+  Poll 17: status = Fulfilling
+  Poll 18: status = Fulfilling
+  Poll 19: status = Fulfilling
+  Poll 20: status = Fulfilling
+  Poll 21: status = Fulfilling
+  Poll 22: status = Fulfilling
+  Poll 23: status = Fulfilling
+  FAIL O2-2: swap status = Fulfilling
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 70s
+  Pool after: 13801000 cBTC (change: -1000000)
+  PASS O2-3: pool decreased by 1000000
+  Onramp 2 done: hash=29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a pool=13801000
+
+--- Onramp 3 / 10 ---
+
+Pool before: 13801000 cBTC
+Payment hash: 67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca
+sendpayment lntbs10u1p57wlvxdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp5vlpgqq2vu030qsrce26v74aq2tjegl83e87enhgq3e3k5ty9pm9qsp536cvwh40xahcu486vry0ne8u5jdwr9whzrlky5wrgzldka7fqpps9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfqlng7rnrkd48a5u8k2lg4zsy909w7e338fmexmef5k47mw6xtmn536jgmak83zkf225d8ljmgempyzxglrf48zykgtqe6yf4h0aa34tsqts8umj
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca with preimage 801c7a742e58ffd58f3f3a043c5991ee88d11563bcc61f50b6fc49d65e0e387d
+> PAYMENT SUCCESS (preimage: 801c7a742e58ffd5...)
+  PASS O3-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Completed
+  CreateInvoice TX: bb39f3d03eff4befd80e9d0f919793914408234ffffccf6a120af06e8ca2c44b
+  FulfillInvoice TX: dee507ba0058296359d9bfd9aded4597943433697e9b98c6b153dc9923c0cf40
+  PASS O3-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 50s
+  Pool after: 12801000 cBTC (change: -1000000)
+  PASS O3-3: pool decreased by 1000000
+  Onramp 3 done: hash=67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca pool=12801000
+
+--- Onramp 4 / 10 ---
+
+Pool before: 12801000 cBTC
+Payment hash: ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a
+sendpayment lntbs10u1p57wlw5dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp5lu2jj8aemrdwj7h8kdht0kj7nedk8zexxkkwluedy305pgga84aqsp5x5u0pdnyl5mzxgtjfj84hez4dwhe63y7qqyzvx33apjf47jr67gq9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfqquu792pgln2nkdqhk60yn0x44nfpwzm87nfxfa098va0pz44mffkm7ajhh5zxfh8uuteqdzpsjtps6ltytxp29eemk02ak7tvsdyyvsqtaqm0v
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a with preimage 2bca31391762d6e5896c7d9df1c8dfd0d3909a6b1294ca6349bbfa050312486a
+> PAYMENT SUCCESS (preimage: 2bca31391762d6e5...)
+  PASS O4-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Fulfilling
+  Poll 7: status = Fulfilling
+  Poll 8: status = Fulfilling
+  Poll 9: status = Fulfilling
+  Poll 10: status = Fulfilling
+  Poll 11: status = Fulfilling
+  Poll 12: status = Fulfilling
+  Poll 13: status = Fulfilling
+  Poll 14: status = Completed
+  CreateInvoice TX: a8e2e28cd07c0a3c87b6e4e945891d4dbbf9f3974b6b946695a2cbe9043bb66c
+  FulfillInvoice TX: bdbf438a00bf4f95e00a633e389d044628c8fce7c737e35d857e6fd5d5578cd9
+  PASS O4-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 20s
+  Pool after: 11801000 cBTC (change: -1000000)
+  PASS O4-3: pool decreased by 1000000
+  Onramp 4 done: hash=ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a pool=11801000
+
+--- Onramp 5 / 10 ---
+
+Pool before: 11801000 cBTC
+Payment hash: 9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29
+sendpayment lntbs10u1p57wl37dr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp5nmptwhqttdva5c5sqn4grnlnjrhxjkx32hwgdqka7pyvzds3fs5ssp5wwajf0g34swnyxpaq3g7m4p58edxvs3gevqhmt9lm238mghx7xxs9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfquka0q07exmvh9njlkxxrveh3jhhnqxlyea5q40mqgsl73cq4ms5hx49dq68cqcaptx4p94xszf7c4qfu9dj9072jggrwpn753n928hsqjhgmh2
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29 with preimage a836adc0ce077b2327c294fd990de2c2a289e9537fa0a48c069ad453d54042a0
+> PAYMENT SUCCESS (preimage: a836adc0ce077b23...)
+  PASS O5-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Fulfilling
+  Poll 7: status = Fulfilling
+  Poll 8: status = Fulfilling
+  Poll 9: status = Fulfilling
+  Poll 10: status = Fulfilling
+  Poll 11: status = Fulfilling
+  Poll 12: status = Fulfilling
+  Poll 13: status = Fulfilling
+  Poll 14: status = Completed
+  CreateInvoice TX: eea3e8c3a4da4ede3ed8010d197891d22d0ce14e2d4c1892009a3a12b4aaf963
+  FulfillInvoice TX: 2275501d94c14b8717170c42b4b1e9dc47f3b1a864405766c2d5777737800e0f
+  PASS O5-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 40s
+  Pool after: 10801000 cBTC (change: -1000000)
+  PASS O5-3: pool decreased by 1000000
+  Onramp 5 done: hash=9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29 pool=10801000
+
+--- Onramp 6 / 10 ---
+
+Pool before: 10801000 cBTC
+Payment hash: 3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65
+sendpayment lntbs10u1p57wl4edr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp58n4n29lh3qwndtqvck8q33f59tt0f4smjwwtcwn43ldh79zphfjssp5zv83k9th0c69ch5yaxqdz8kv7uvr0ve2x6y8t3wt5k9uvz87evdq9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfqxp6lt9u3n88pfz79uzte2frxlnte5ee2h78s4zqs22ec0p0872n39ck9trhawyp72utwgdd74whqtf9srl3266td3n4z8ekkw7kjy4qpsctxcz
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65 with preimage 239939b0702ad30fb166ea4ede2adc2acbccf09e9e53d2754775d68532bedbc7
+> PAYMENT SUCCESS (preimage: 239939b0702ad30f...)
+  PASS O6-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Completed
+  CreateInvoice TX: 0cfc45d04f5a8a48536edd7dfd7027c09bed1afad86d4ea7d3b6451e862cb400
+  FulfillInvoice TX: ae050d0816e63a82e4f583fe9ffb47cb64e11285be6b4b5256cda8ab128fe351
+  PASS O6-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 70s
+  Pool after: 9801000 cBTC (change: -1000000)
+  PASS O6-3: pool decreased by 1000000
+  Onramp 6 done: hash=3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65 pool=9801000
+
+--- Onramp 7 / 10 ---
+
+Pool before: 9801000 cBTC
+Payment hash: d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2
+sendpayment lntbs10u1p57wlendr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp56fptv9dk00yn4jp8ar2vfaf28u4cprmjczh29sscmt60gd2y8tpqsp50fwf3adjrects4ednkh65ncpgfv8wjdfzfw9qmx88a667s92fhcs9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfqejqznhwrzy37v4wpdsvnmahnvvw72seymkpz4zfrcc6wfszezspk8y3kw0l06z5ayh8w7jg08lj5xwrhpw6nm4vksl7lvd85nuzwmegpk76tfu
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2 with preimage 21c38c9f62c28645e62a0142ed6470da76b1af38890c7af9044a2289126cf9a9
+> PAYMENT SUCCESS (preimage: 21c38c9f62c28645...)
+  PASS O7-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Fulfilling
+  Poll 7: status = Fulfilling
+  Poll 8: status = Fulfilling
+  Poll 9: status = Fulfilling
+  Poll 10: status = Fulfilling
+  Poll 11: status = Completed
+  CreateInvoice TX: 6dd9209ad616d30df5fca9381f5f990b26e76f1a86ffe8d6f300df5d678291aa
+  FulfillInvoice TX: a398205914942b1d67a50105b391439fc02f9cc0659fb6df353e0b38438e2e66
+  PASS O7-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 30s
+  Pool after: 8801000 cBTC (change: -1000000)
+  PASS O7-3: pool decreased by 1000000
+  Onramp 7 done: hash=d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2 pool=8801000
+
+--- Onramp 8 / 10 ---
+
+Pool before: 8801000 cBTC
+Payment hash: 1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c
+sendpayment lntbs10u1p57wlukdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp5rjvckp5j833dxsepe64l6lq0s5m29ywxm04s605xrxuzsf0p3uxqsp52qt23f2fr2a9jjp3rv20g9kaqrdkrzp0zz6mjczc2zg7hn54xmmq9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfqfw0tlyxuh7wdwsrncnup02xfke9umxs8vvh49tuk8n66vav44k0rtz72tjgjjn67zavwkjanu3kqqvyf6yw0h77jds9qgh2v908f3aqqhjljvy
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c with preimage 5ce238f5e74364063e290892b4be40e9bbcb8152a2ccaec48885caa46de5771f
+> PAYMENT SUCCESS (preimage: 5ce238f5e7436406...)
+  PASS O8-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Fulfilling
+  Poll 7: status = Fulfilling
+  Poll 8: status = Fulfilling
+  Poll 9: status = Fulfilling
+  Poll 10: status = Fulfilling
+  Poll 11: status = Fulfilling
+  Poll 12: status = Fulfilling
+  Poll 13: status = Fulfilling
+  Poll 14: status = Fulfilling
+  Poll 15: status = Completed
+  CreateInvoice TX: 70805f5ad28735506623ab591c311389f9eca652ac243c2b6d8e088d143a1c93
+  FulfillInvoice TX: 045396ff957295ad976642721bc76cc43ae0dde3f9c9c8326e23de7f37501bbe
+  PASS O8-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool unreserved after 10s
+  Pool after: 7801000 cBTC (change: -1000000)
+  PASS O8-3: pool decreased by 1000000
+  Onramp 8 done: hash=1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c pool=7801000
+
+--- Onramp 9 / 10 ---
+
+Pool before: 7801000 cBTC
+Payment hash: 6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b
+sendpayment lntbs10u1p57wllmdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp5d5pnyxj6c4jjhh8rpe84rjt2ggkzf6jmsz4y6hn36rx44z6rse9ssp58rgxj30u05kek8rk3dand4rg6dnu0f6an6mfrcy8hwlma8a6hmfq9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfql5qhwgrjqelchpmz2w6ytl5k3gs90s75lzya7hczq2yf7ne3fm5zqnmnzxjnmch0sr8zc2rx3jkpgzwfswndwka8kundze94mpdpz5cptewt0t
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b with preimage 71dc8c79b171324de1d3fd53d83796e127255a054f87155277596537f704326f
+> PAYMENT SUCCESS (preimage: 71dc8c79b171324d...)
+  PASS O9-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Fulfilling
+  Poll 4: status = Fulfilling
+  Poll 5: status = Fulfilling
+  Poll 6: status = Fulfilling
+  Poll 7: status = Fulfilling
+  Poll 8: status = Fulfilling
+  Poll 9: status = Completed
+  CreateInvoice TX: 65a0b3a2e695e8c72ac367ed3e182ab5a3dc8da212821b5f2cb05d50e0028842
+  FulfillInvoice TX: bf3e7a2304be066f20805c1e9e7fe780f3e3c6fb07c3ecb07d7bd52c10ddb3c9
+  PASS O9-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 20s
+  Pool after: 6801000 cBTC (change: -1000000)
+  PASS O9-3: pool decreased by 1000000
+  Onramp 9 done: hash=6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b pool=6801000
+
+--- Onramp 10 / 10 ---
+
+Pool before: 6801000 cBTC
+Payment hash: 22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363
+sendpayment lntbs10u1p570qzcdr4vdp9gs6l2dt5z5p6v9jxgujlw3jhxap3weaxx7rvx3jk5ue5w3ckgdthxauksdrs89mkwurr0fkrw7n5x3ekzet8w5uxkcmkxajksafk0fekvumkveargnp4q0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkpp5ytfel6t2xk658u5fvjnkw04eqezsrn0p70gpx4pz6qvr9z9wwd3ssp5tqsatwalpumc980kuqqf8wrrjxf22qskthh64326xvg46st30rss9qyysgqcqzp2xqrrssrzjqv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeyqp7tcqq2aqqqvqqqqlgqqqqqqqqfq5xq7gcvvdmge5a04efvwwcvxfhjsc9qnsfsd68exf5wsdltq46trsa46rnrxmr0vdxejd973zhne2e5ppzd8lfsfm0yj748zhawcj3sqlc3f3r
+EVENT: initiated sending 1000000 msats to 03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+> > 
+EVENT: successfully sent payment of 1000000 millisatoshis (fee 0 msat) from payment hash 22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363 with preimage 0d578893e338fc730e444f75377e5fa4c25d4e43a8fbe764df2e00fbbd9bb49c
+> PAYMENT SUCCESS (preimage: 0d578893e338fc73...)
+  PASS O10-1: Lightning payment succeeded
+  Poll 0: status = Fulfilling
+  Poll 1: status = Fulfilling
+  Poll 2: status = Fulfilling
+  Poll 3: status = Completed
+  CreateInvoice TX: 1482000558f5ab851b753f9e2178418cf29cd29af66abaf703a070b01a6b831b
+  FulfillInvoice TX: e460bd09783ee503fb1d12a0b2f3012649ad677482bcb6cda87dd0b230b89f87
+  PASS O10-2: swap completed
+  Waiting for FulfillInvoice indexing...
+  Pool reserved=1000000, waiting...
+  Pool unreserved after 20s
+  Pool after: 5801000 cBTC (change: -1000000)
+  PASS O10-3: pool decreased by 1000000
+  Onramp 10 done: hash=22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363 pool=5801000
+
+==========================================
+  Offramp Swaps (10 x 50000 cBTC)
+==========================================
+
+--- Offramp 1 / 10 ---
+
+Pool before: 5801000 cBTC
+getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570qyzdqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5kwgn7g5zs9ez38r9tj3632f3he03htt8jlm4vdkp9nms2atsk3sqsp59frey604ak5z9s83pt8w22dnx095eqz7umq7cmt8gj2d44r9mmrq9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqtwkj0v88pd4dltvmlxrcp3v8h4vjeq8l27ja5mwecqt7us39eqjxq2v0e4cq7uvw0wlnle29qpm9hgpxxpsfuq44870fnjxl2wrjyjgpls4tux
+> Offramp ID: 27  Payment hash: b3913f22828172289c655ca3a8a931be5f1bad6797f75636c12cf7057570b460
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Created LM invoice #54 on Cardano (tx: 1a737be2f936b99cd1242fca0eec187f0c1542279c4f38d6b3686cee12155dda)
+
+EVENT: received payment from payment hash ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007 of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007 of 1000000 millisatoshis
+> LM invoice #54: not yet in on-chain state (attempt 1/24), waiting...
+LM invoice #54: not yet in on-chain state (attempt 2/24), waiting...
+LM invoice #54: not yet in on-chain state (attempt 3/24), waiting...
+SUCCESS: swap ae3a68f3b7665268baae65e4f4aa81d9f796ef9ca08346867c0bc6a59239a007 fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: 77e76bd12147fcfdfee330833b8bbae7b8f22b886ff452bc378822d85183a2e6
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Created LM invoice #55 on Cardano (tx: 6a6a6746fea2e9f54a2fdb6f2aa2f5c3bc327d9a41c4e089bf47f3adc27110f1)
+
+EVENT: received payment from payment hash 29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a of 1000000 millisatoshis
+> LM invoice #55: not yet in on-chain state (attempt 1/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 2/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 3/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 4/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 5/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 6/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+LM invoice #55: not yet in on-chain state (attempt 7/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 8/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 9/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 10/24), waiting...
+LM invoice #55: not yet in on-chain state (attempt 11/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+LM invoice #55: not yet in on-chain state (attempt 12/24), waiting...
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: swap 29aabc86419b53a0590369de3a4608a3b3a1335ec2b05d3b30567094feecce4a fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: f2bbf5892e4ff85966443fdc7dc845133459db1d526c7548c9463256bb7152e5
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateInvoice: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Created LM invoice #56 on Cardano (tx: bb39f3d03eff4befd80e9d0f919793914408234ffffccf6a120af06e8ca2c44b)
+
+EVENT: received payment from payment hash 67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca of 1000000 millisatoshis
+> LM invoice #56: not yet in on-chain state (attempt 1/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: swap 67c280014ce3e2f04078cab4cf57a052e5947cf1c9fd99dd008e636a2c850eca fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: dee507ba0058296359d9bfd9aded4597943433697e9b98c6b153dc9923c0cf40
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Created LM invoice #57 on Cardano (tx: a8e2e28cd07c0a3c87b6e4e945891d4dbbf9f3974b6b946695a2cbe9043bb66c)
+
+EVENT: received payment from payment hash ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a of 1000000 millisatoshis
+> LM invoice #57: not yet in on-chain state (attempt 1/24), waiting...
+LM invoice #57: not yet in on-chain state (attempt 2/24), waiting...
+LM invoice #57: not yet in on-chain state (attempt 3/24), waiting...
+LM invoice #57: not yet in on-chain state (attempt 4/24), waiting...
+LM invoice #57: not yet in on-chain state (attempt 5/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+LM invoice #57: not yet in on-chain state (attempt 6/24), waiting...
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: swap ff15291fb9d8dae97ae7b36eb7da5e9e5b638b2635aceff32d245f40a11d3d7a fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: bdbf438a00bf4f95e00a633e389d044628c8fce7c737e35d857e6fd5d5578cd9
+Created LM invoice #58 on Cardano (tx: eea3e8c3a4da4ede3ed8010d197891d22d0ce14e2d4c1892009a3a12b4aaf963)
+
+EVENT: received payment from payment hash 9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29 of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29 of 1000000 millisatoshis
+> LM invoice #58: not yet in on-chain state (attempt 1/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+LM invoice #58: not yet in on-chain state (attempt 2/24), waiting...
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+LM invoice #58: not yet in on-chain state (attempt 3/24), waiting...
+LM invoice #58: not yet in on-chain state (attempt 4/24), waiting...
+FulfillInvoice(9ec2b75c0b5b59da): retry 2/3 (waiting 15s for Blockfrost indexing)...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: swap 9ec2b75c0b5b59da629004ea81cff390ee6958d155dc8682ddf048c136114c29 fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: 2275501d94c14b8717170c42b4b1e9dc47f3b1a864405766c2d5777737800e0f
+Created LM invoice #59 on Cardano (tx: 0cfc45d04f5a8a48536edd7dfd7027c09bed1afad86d4ea7d3b6451e862cb400)
+
+EVENT: received payment from payment hash 3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65 of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65 of 1000000 millisatoshis
+> LM invoice #59: not yet in on-chain state (attempt 1/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: swap 3ceb3517f7881d36ac0cc58e08c5342ad6f4d61b939cbc3a758fdb7f1441ba65 fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: ae050d0816e63a82e4f583fe9ffb47cb64e11285be6b4b5256cda8ab128fe351
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateInvoice: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Created LM invoice #60 on Cardano (tx: 6dd9209ad616d30df5fca9381f5f990b26e76f1a86ffe8d6f300df5d678291aa)
+
+EVENT: received payment from payment hash d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2 of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2 of 1000000 millisatoshis
+> LM invoice #60: not yet in on-chain state (attempt 1/24), waiting...
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+LM invoice #60: not yet in on-chain state (attempt 2/24), waiting...
+LM invoice #60: not yet in on-chain state (attempt 3/24), waiting...
+FulfillInvoice(d242b615b67bc93a): retry 2/3 (waiting 15s for Blockfrost indexing)...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+SUCCESS: swap d242b615b67bc93ac827e8d4c4f52a3f2b808f72c0aea2c218daf4f435443ac2 fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: a398205914942b1d67a50105b391439fc02f9cc0659fb6df353e0b38438e2e66
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Created LM invoice #61 on Cardano (tx: 70805f5ad28735506623ab591c311389f9eca652ac243c2b6d8e088d143a1c93)
+
+EVENT: received payment from payment hash 1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c of 1000000 millisatoshis
+> LM invoice #61: not yet in on-chain state (attempt 1/24), waiting...
+LM invoice #61: not yet in on-chain state (attempt 2/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+LM invoice #61: not yet in on-chain state (attempt 3/24), waiting...
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+LM invoice #61: not yet in on-chain state (attempt 4/24), waiting...
+LM invoice #61: not yet in on-chain state (attempt 5/24), waiting...
+FulfillInvoice(1c998b06923c62d3): retry 2/3 (waiting 15s for Blockfrost indexing)...
+SUCCESS: swap 1c998b06923c62d34321ceabfd7c0f8536a291c6dbeb0d3e8619b82825e18f0c fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: 045396ff957295ad976642721bc76cc43ae0dde3f9c9c8326e23de7f37501bbe
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Created LM invoice #62 on Cardano (tx: 65a0b3a2e695e8c72ac367ed3e182ab5a3dc8da212821b5f2cb05d50e0028842)
+
+EVENT: received payment from payment hash 6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b of 1000000 millisatoshis
+> LM invoice #62: not yet in on-chain state (attempt 1/24), waiting...
+LM invoice #62: not yet in on-chain state (attempt 2/24), waiting...
+LM invoice #62: not yet in on-chain state (attempt 3/24), waiting...
+LM invoice #62: not yet in on-chain state (attempt 4/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+SUCCESS: swap 6d03321a5ac5652bdce30e4f51c96a422c24ea5b80aa4d5e71d0cd5a8b43864b fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: bf3e7a2304be066f20805c1e9e7fe780f3e3c6fb07c3ecb07d7bd52c10ddb3c9
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateInvoice: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Created LM invoice #63 on Cardano (tx: 1482000558f5ab851b753f9e2178418cf29cd29af66abaf703a070b01a6b831b)
+
+EVENT: received payment from payment hash 22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363 of 1000000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363 of 1000000 millisatoshis
+> LM invoice #63: not yet in on-chain state (attempt 1/24), waiting...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: swap 22d39fe96a35b543f28964a7673eb9064501cde1f3d0135422d0183288ae7363 fulfilled, cBTC sent to addr_test1vzcxl4ejs4tqd5w7yh4p9wgpczl7zt4saegu8kcv7ehu6zsfsvfz4, tx: e460bd09783ee503fb1d12a0b2f3012649ad677482bcb6cda87dd0b230b89f87
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Offramp #27: CreateOfframp TX submitted (hash: 62d5bb02adfecdc428cd40be2eaedda94629e325764c0f58503b5bd4b2b8a21f)
+  CreateOfframp TX: 62d5bb02adfecdc428cd40be2eaedda94629e325764c0f58503b5bd4b2b8a21f
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  UTxO indexed after 50s
+  Sending 50000 cBTC to operator...
+  cBTC TX: cc294d5e7d2637fd215aaaa81d92d9f25a02431eb198ccc888d82fcc2f1b3f42
+  Polling for cBTC TX indexing...
+  TX indexed after 10s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = depositing_to_pool
+  Poll 1: status = depositing_to_pool
+  Poll 2: status = depositing_to_pool
+  Poll 3: status = completed
+  FulfillOfframp TX: 767f70578f74344b7d0b7c764ecd188f3aee4f31b1544c6b97ecbc6433cb0665
+  Lightning preimage: 1f5ad24ee5ed0786...
+  PASS F1-1: offramp completed
+  Pool updated after 80s
+  Pool after: 5851000 cBTC (change: +50000)
+  PASS F1-2: pool increased by 50000
+  Offramp 1 done: id=27 pool=5851000
+
+--- Offramp 2 / 10 ---
+
+Pool before: 5851000 cBTC
+
+EVENT: received payment from payment hash b3913f22828172289c655ca3a8a931be5f1bad6797f75636c12cf7057570b460 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash b3913f22828172289c655ca3a8a931be5f1bad6797f75636c12cf7057570b460 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570qfcdqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5dy7czgdk072j84gadnuf5rntnrm8zyukaw4fua8t5nhqkujph77ssp5p4j8e0zy9fvnzzp6ehn8czd876saaxzr4swgu2u0vetcf8v3x58q9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfq0ak2aj5s6xa6g65qvzwx3n0hxdjk6vuedzh4aa2e9rqjzwat67u4ehd54h8veu24h8s63v3vajcdtjxz65nc5nx7hvthncxcplkgfssqaxcjgh
+> Offramp ID: 28  Payment hash: 693d8121b67f9523d51d6cf89a0e6b98f6711396ebaa9e74eba4ee0b7241bfbd
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #27: paying Lightning invoice (hash: b3913f22828172289c655ca3a8a931be5f1bad6797f75636c12cf7057570b460)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash b3913f22828172289c655ca3a8a931be5f1bad6797f75636c12cf7057570b460 with preimage 1f5ad24ee5ed0786d05ae012eca60dd47e86b3b4cccde725ddcbf911c400a4ff
+> Offramp #27: Lightning payment sent (preimage: 1f5ad24ee5ed0786d05ae012eca60dd47e86b3b4cccde725ddcbf911c400a4ff), submitting FulfillOfframp TX...
+FulfillOfframp(#27): retry 2/3 (waiting 15s for Blockfrost indexing)...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+SUCCESS: Offramp #27 completed, FulfillOfframp TX: 767f70578f74344b7d0b7c764ecd188f3aee4f31b1544c6b97ecbc6433cb0665
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Offramp #28: CreateOfframp TX submitted (hash: 806c0018d32826b5d355fec4cceb784fddf70203a2ab084d627534f13fb67231)
+  CreateOfframp TX: 806c0018d32826b5d355fec4cceb784fddf70203a2ab084d627534f13fb67231
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  UTxO indexed after 50s
+  Sending 50000 cBTC to operator...
+  cBTC TX: 889e0e59c461b67396565536abe1a278be641b0035ee626f984b033129980c77
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX not yet indexed (20s)...
+  TX not yet indexed (30s)...
+  TX not yet indexed (40s)...
+  TX not yet indexed (50s)...
+  TX not yet indexed (60s)...
+  TX not yet indexed (70s)...
+  TX indexed after 80s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: f536fe4dcb224260237193bca2e3daaafdbf43ea5904a2ed63f15c96f8c2e337
+  Lightning preimage: 49102920733ca983...
+  PASS F2-1: offramp completed
+  Pool updated after 20s
+  Pool after: 5901000 cBTC (change: +50000)
+  PASS F2-2: pool increased by 50000
+  Offramp 2 done: id=28 pool=5901000
+
+--- Offramp 3 / 10 ---
+
+Pool before: 5901000 cBTC
+
+EVENT: received payment from payment hash 693d8121b67f9523d51d6cf89a0e6b98f6711396ebaa9e74eba4ee0b7241bfbd of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 693d8121b67f9523d51d6cf89a0e6b98f6711396ebaa9e74eba4ee0b7241bfbd of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570q0sdqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5mmy8xthckjzzyq6dym5lydn4mfjele2m558ccntfa692nfu5af6qsp50va4wln0k8ufn2daxujq2fgtl0vnkmjtz4vyzl8lu0j938r043zs9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfq0ngq6rwhhlrusgupqf0283u37h0486g6azr6v4htpls40dlerf58kafzvq4ya56cez2q2y454s9vyh87aw0qdqyg9sr98lkjcs33z9gp4sfh9y
+> Offramp ID: 29  Payment hash: dec8732ef8b48422034d26e9f23675da659fe55ba50f8c4d69ee8aa9a794ea74
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #28: paying Lightning invoice (hash: 693d8121b67f9523d51d6cf89a0e6b98f6711396ebaa9e74eba4ee0b7241bfbd)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 693d8121b67f9523d51d6cf89a0e6b98f6711396ebaa9e74eba4ee0b7241bfbd with preimage 49102920733ca9832da507613051d3078bba5ee078f74d60ac2eede9ea9d85b9
+> Offramp #28: Lightning payment sent (preimage: 49102920733ca9832da507613051d3078bba5ee078f74d60ac2eede9ea9d85b9), submitting FulfillOfframp TX...
+SUCCESS: Offramp #28 completed, FulfillOfframp TX: f536fe4dcb224260237193bca2e3daaafdbf43ea5904a2ed63f15c96f8c2e337
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #29: CreateOfframp TX submitted (hash: ea986c6eb57bc0ea6732785b5572642b37e86f0b9dee17675ae0872021f83448)
+  CreateOfframp TX: ea986c6eb57bc0ea6732785b5572642b37e86f0b9dee17675ae0872021f83448
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  Still waiting for UTxO indexing (60s)...
+  Still waiting for UTxO indexing (90s)...
+  UTxO indexed after 100s
+  Sending 50000 cBTC to operator...
+  cBTC TX: 3b3eb06019ab02d88ba3de10e0dd4de0ecdd3444b3a6b7c9a1cdd88b6b191d16
+  Polling for cBTC TX indexing...
+  TX indexed after 10s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: f672b84b87e6db331de97202a0c6791cf08054e01daa3266a2a1cab01bae4e88
+  Lightning preimage: 7b83f620b8db344f...
+  PASS F3-1: offramp completed
+  Pool updated after 80s
+  Pool after: 5951000 cBTC (change: +50000)
+  PASS F3-2: pool increased by 50000
+  Offramp 3 done: id=29 pool=5951000
+
+--- Offramp 4 / 10 ---
+
+Pool before: 5951000 cBTC
+
+EVENT: received payment from payment hash dec8732ef8b48422034d26e9f23675da659fe55ba50f8c4d69ee8aa9a794ea74 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash dec8732ef8b48422034d26e9f23675da659fe55ba50f8c4d69ee8aa9a794ea74 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570qk4dqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5se8sl38tguz4tpx08fapnr6pt0vcrvgjuh697nz8q6z735rkuhxssp5ldpwtlq9msth9puqm55w2js2lp3nc8dhs8zfyg3r6qvsgmutn7rq9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqw72sg9rkpttdzwxss9v6nkwu438n6yvpm6rltcsr2puajqktecn4ucspphtlpn5ya0c4gwqfhyerapn0qkecr944sudhya7yzueav7sp28kyq9
+> Offramp ID: 30  Payment hash: 864f0fc4eb47055584cf3a7a198f415bd981b112e5f45f4c470685e8d076e5cd
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): network error: error sending request for url (https://cardano-preprod.blockfrost.io/api/v0/addresses/addr_test1wqf2s47jetde0ne0n0u9vfrm04q363n5ycnzyupen5j20hqple0j8/utxos)
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #29: paying Lightning invoice (hash: dec8732ef8b48422034d26e9f23675da659fe55ba50f8c4d69ee8aa9a794ea74)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash dec8732ef8b48422034d26e9f23675da659fe55ba50f8c4d69ee8aa9a794ea74 with preimage 7b83f620b8db344f8d86703db3edaa55e08f88aeeed4876076147927f68d033e
+> Offramp #29: Lightning payment sent (preimage: 7b83f620b8db344f8d86703db3edaa55e08f88aeeed4876076147927f68d033e), submitting FulfillOfframp TX...
+SUCCESS: Offramp #29 completed, FulfillOfframp TX: f672b84b87e6db331de97202a0c6791cf08054e01daa3266a2a1cab01bae4e88
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Offramp #30: CreateOfframp TX submitted (hash: 61f84fab790ddccb6ec68eb67c9d14e3d324005ef5582ed6e2f6d493aadc372c)
+  CreateOfframp TX: 61f84fab790ddccb6ec68eb67c9d14e3d324005ef5582ed6e2f6d493aadc372c
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  UTxO indexed after 60s
+  Sending 50000 cBTC to operator...
+  cBTC TX: b99812ac0c1773d00347233d85dc01d09edc6b2bc494fa1c169a5ea18f76c953
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX indexed after 20s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: 0aaaa20b9bd2dc78f8ab10ce61624d4c0d118e39aa7d5fb306b91b14f59fce5e
+  Lightning preimage: 9a640d781276d77a...
+  PASS F4-1: offramp completed
+  Pool updated after 40s
+  Pool after: 6001000 cBTC (change: +50000)
+  PASS F4-2: pool increased by 50000
+  Offramp 4 done: id=30 pool=6001000
+
+--- Offramp 5 / 10 ---
+
+Pool before: 6001000 cBTC
+
+EVENT: received payment from payment hash 864f0fc4eb47055584cf3a7a198f415bd981b112e5f45f4c470685e8d076e5cd of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 864f0fc4eb47055584cf3a7a198f415bd981b112e5f45f4c470685e8d076e5cd of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570qm0dqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp57pj8wvd9hu22tssvg8p3g4h4hyu3y59k603a0gaq6zxmfgheq8cqsp5t9gzsvt8n6zzg7rjg9zmjsy7gq2ylxm3xjay7erkklqsp9js6j8q9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqtuk94vs5wn04tg7cn2zwwhpmf7hzh5udt934w48eg4qrn6fdng0zner4v8qxdy2aguc7nqk6h6fw6fcks5xmp27el4rn9560xzr5rnsp64207w
+> Offramp ID: 31  Payment hash: f0647731a5bf14a5c20c41c31456f5b9391250b6d3e3d7a3a0d08db4a2f901f0
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #30: paying Lightning invoice (hash: 864f0fc4eb47055584cf3a7a198f415bd981b112e5f45f4c470685e8d076e5cd)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 864f0fc4eb47055584cf3a7a198f415bd981b112e5f45f4c470685e8d076e5cd with preimage 9a640d781276d77a700c9043eb7be8b5e16ed07a06214670f0940458fc46448f
+> Offramp #30: Lightning payment sent (preimage: 9a640d781276d77a700c9043eb7be8b5e16ed07a06214670f0940458fc46448f), submitting FulfillOfframp TX...
+SUCCESS: Offramp #30 completed, FulfillOfframp TX: 0aaaa20b9bd2dc78f8ab10ce61624d4c0d118e39aa7d5fb306b91b14f59fce5e
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #31: CreateOfframp TX submitted (hash: 54d130bc90e08a3fee11fdc6bdb2331be64a47e32facf7c044b76eb42ef0e354)
+  CreateOfframp TX: 54d130bc90e08a3fee11fdc6bdb2331be64a47e32facf7c044b76eb42ef0e354
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  Still waiting for UTxO indexing (60s)...
+  Still waiting for UTxO indexing (90s)...
+  UTxO indexed after 110s
+  Sending 50000 cBTC to operator...
+  cBTC TX: de963b6e7228a41a70b292d656579a335f7c5834df4598b349eccb205c6e5078
+  Polling for cBTC TX indexing...
+  TX indexed after 10s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: 31bb7878652a75ff0e09884f5316d0475e1a0ce67359d99b2935084b2c232271
+  Lightning preimage: 4a5a55518a5469dd...
+  PASS F5-1: offramp completed
+  Pool updated after 60s
+  Pool after: 6051000 cBTC (change: +50000)
+  PASS F5-2: pool increased by 50000
+  Offramp 5 done: id=31 pool=6051000
+
+--- Offramp 6 / 10 ---
+
+Pool before: 6051000 cBTC
+
+EVENT: received payment from payment hash f0647731a5bf14a5c20c41c31456f5b9391250b6d3e3d7a3a0d08db4a2f901f0 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash f0647731a5bf14a5c20c41c31456f5b9391250b6d3e3d7a3a0d08db4a2f901f0 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570ppddqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5unks2ydsvytxt3kgef8tacrfaa5zq3cnz0rkx7kqmgw9ek44qexqsp5vw2r5hlek3uw6kessf4373f5g99mlkzl0xmd0fg6yl6wghs8hraq9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqfkge9r9y93fj0tfms6yv0ea9th57hucqrm52slct6ln6s0awh3yzt7nglf5x4vtygv58mmedltcw2mcqqqv2u2d7hk2dxuaw2k7uuwqqdz3lyl
+> Offramp ID: 32  Payment hash: e4ed0511b0611665c6c8ca4ebee069ef6820471313c7637ac0da1c5cdab5064c
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #31: paying Lightning invoice (hash: f0647731a5bf14a5c20c41c31456f5b9391250b6d3e3d7a3a0d08db4a2f901f0)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash f0647731a5bf14a5c20c41c31456f5b9391250b6d3e3d7a3a0d08db4a2f901f0 with preimage 4a5a55518a5469dd2b3a017d05bbd0d3dada32e322fb3999c6d2acaf651d2f5c
+> Offramp #31: Lightning payment sent (preimage: 4a5a55518a5469dd2b3a017d05bbd0d3dada32e322fb3999c6d2acaf651d2f5c), submitting FulfillOfframp TX...
+SUCCESS: Offramp #31 completed, FulfillOfframp TX: 31bb7878652a75ff0e09884f5316d0475e1a0ce67359d99b2935084b2c232271
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #32: CreateOfframp TX submitted (hash: 89316cbba15474c78c65cc0c790188da26d35ea2803f8f5db006524d17b6d5ee)
+  CreateOfframp TX: 89316cbba15474c78c65cc0c790188da26d35ea2803f8f5db006524d17b6d5ee
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  Still waiting for UTxO indexing (60s)...
+  UTxO indexed after 80s
+  Sending 50000 cBTC to operator...
+  cBTC TX: abe11eacf5cb1395eb5e78a9d14a017c389a80c83e9eaabe2e49e025c9946871
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX not yet indexed (20s)...
+  TX not yet indexed (30s)...
+  TX not yet indexed (40s)...
+  TX not yet indexed (50s)...
+  TX not yet indexed (60s)...
+  TX indexed after 70s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: 1a2dcf2b5b5bc6da36633f268b2c58e156c78f5f972ac7981326b31b5c1d26e6
+  Lightning preimage: becc195ee64224cd...
+  PASS F6-1: offramp completed
+  Pool updated after 10s
+  Pool after: 6101000 cBTC (change: +50000)
+  PASS F6-2: pool increased by 50000
+  Offramp 6 done: id=32 pool=6101000
+
+--- Offramp 7 / 10 ---
+
+Pool before: 6101000 cBTC
+
+EVENT: received payment from payment hash e4ed0511b0611665c6c8ca4ebee069ef6820471313c7637ac0da1c5cdab5064c of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash e4ed0511b0611665c6c8ca4ebee069ef6820471313c7637ac0da1c5cdab5064c of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570pxhdqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp53wm0aaxasr7m86h74aj4rlucw0nm4h5p2gvd59c2jul6uq5gzwhqsp5z4xvd558kvm5eqduc6cykrsr6nzs6mthq38rmfp6sz7sqlvq8x9s9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqs0rt0rdmp8aa8wl9yjx2069yunu760zkjs7ha7nullaqsxn66a3zd8fvqfxp9lw09065ldwskz5hvauqk2xpxhuwe0cyskztrvxgp0gpw8c60w
+> Offramp ID: 33  Payment hash: 8bb6fef4dd80fdb3eafeaf6551ff9873e7bade815218da170a973fae028813ae
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #32: paying Lightning invoice (hash: e4ed0511b0611665c6c8ca4ebee069ef6820471313c7637ac0da1c5cdab5064c)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash e4ed0511b0611665c6c8ca4ebee069ef6820471313c7637ac0da1c5cdab5064c with preimage becc195ee64224cd80df558641622186a64bf0631fa16a3683ba9a6f3746ee3c
+> Offramp #32: Lightning payment sent (preimage: becc195ee64224cd80df558641622186a64bf0631fa16a3683ba9a6f3746ee3c), submitting FulfillOfframp TX...
+SUCCESS: Offramp #32 completed, FulfillOfframp TX: 1a2dcf2b5b5bc6da36633f268b2c58e156c78f5f972ac7981326b31b5c1d26e6
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #33: CreateOfframp TX submitted (hash: c13f28a4fa8c6cba27e9e9d8cdb7e5ecebf90b2a52038ba8e024fd78e288196d)
+  CreateOfframp TX: c13f28a4fa8c6cba27e9e9d8cdb7e5ecebf90b2a52038ba8e024fd78e288196d
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  Still waiting for UTxO indexing (60s)...
+  UTxO indexed after 80s
+  Sending 50000 cBTC to operator...
+  cBTC TX: e4b641d023d2684170cc8c9868e474f5b332b07e8f4ab1483fb7773b1ed287a5
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX not yet indexed (20s)...
+  TX not yet indexed (30s)...
+  TX indexed after 40s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: 0a388897323684b055b59523532b436e41a70aa7fee09d4aa0df3725f03748eb
+  Lightning preimage: 5395361b55554c90...
+  PASS F7-1: offramp completed
+  Pool updated after 20s
+  Pool after: 6151000 cBTC (change: +50000)
+  PASS F7-2: pool increased by 50000
+  Offramp 7 done: id=33 pool=6151000
+
+--- Offramp 8 / 10 ---
+
+Pool before: 6151000 cBTC
+
+EVENT: received payment from payment hash 8bb6fef4dd80fdb3eafeaf6551ff9873e7bade815218da170a973fae028813ae of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 8bb6fef4dd80fdb3eafeaf6551ff9873e7bade815218da170a973fae028813ae of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570ptddqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5394axjs74prygpfnuw5zp7c0p84n9mtnfd0gfpva059gvhua6s2ssp5hnyerm3nta0h2tj28r8wg6vdkq64h32clpgja6cfamksgp6sxt2s9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqegqxlugvkkt7v2kruh0gnpxfv8w5pjxex7heaukwuygxpu7kgeeqxdqj827rukux2vr38zzmtcnn5g93s9jeqsrpcsfkuk8mx0zhz4sp5jyj29
+> Offramp ID: 34  Payment hash: 896bd34a1ea846440533e3a820fb0f09eb32ed734b5e84859d7d0a865f9dd415
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #33: paying Lightning invoice (hash: 8bb6fef4dd80fdb3eafeaf6551ff9873e7bade815218da170a973fae028813ae)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 8bb6fef4dd80fdb3eafeaf6551ff9873e7bade815218da170a973fae028813ae with preimage 5395361b55554c90797a55c5c5fa2fceb7fa1c8a8a64cee67223dbe8cab29d9a
+> Offramp #33: Lightning payment sent (preimage: 5395361b55554c90797a55c5c5fa2fceb7fa1c8a8a64cee67223dbe8cab29d9a), submitting FulfillOfframp TX...
+SUCCESS: Offramp #33 completed, FulfillOfframp TX: 0a388897323684b055b59523532b436e41a70aa7fee09d4aa0df3725f03748eb
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Offramp #34: CreateOfframp TX submitted (hash: 7975dc4609f2698812028bff2d2c55192a350bedbbf564e700f7a3c1dbc35942)
+  CreateOfframp TX: 7975dc4609f2698812028bff2d2c55192a350bedbbf564e700f7a3c1dbc35942
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  UTxO indexed after 50s
+  Sending 50000 cBTC to operator...
+  cBTC TX: d8819bf4b41564396a836d865f5ba928fd7023f56375da035f0ed3e8f3823ae9
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX not yet indexed (20s)...
+  TX not yet indexed (30s)...
+  TX not yet indexed (40s)...
+  TX not yet indexed (50s)...
+  TX indexed after 60s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: b6b29cc72a14067a7eca61ae6dcb1d27b3fb4e64f8a720a75a51ca1bcf27bb4b
+  Lightning preimage: 6fe1278c19c76ddc...
+  PASS F8-1: offramp completed
+  Pool updated after 30s
+  Pool after: 6201000 cBTC (change: +50000)
+  PASS F8-2: pool increased by 50000
+  Offramp 8 done: id=34 pool=6201000
+
+--- Offramp 9 / 10 ---
+
+Pool before: 6201000 cBTC
+
+EVENT: received payment from payment hash 896bd34a1ea846440533e3a820fb0f09eb32ed734b5e84859d7d0a865f9dd415 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 896bd34a1ea846440533e3a820fb0f09eb32ed734b5e84859d7d0a865f9dd415 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570psjdqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp5f2fqmecqs2fzf3mgfmu6e0x4fyew8hxeex65yz0ls48g28x9w32ssp5akp4ua7rk2gw5xapv48w9qq4gcxtwr9lrcnc9sw64psx84y45qhs9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfqtz37t4njnzp50wh9wdf3n4rlt8t4ret9ruka5h7dyrcvcwu9f3u4gxk09z40gkctv3xhfu4ezt8477jlgvmsaqra8zwc0g3v8xzzddsqs9crzk
+> Offramp ID: 35  Payment hash: 4a920de700829224c7684ef9acbcd54932e3dcd9c9b54209ff854e851cc57455
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #34: paying Lightning invoice (hash: 896bd34a1ea846440533e3a820fb0f09eb32ed734b5e84859d7d0a865f9dd415)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 896bd34a1ea846440533e3a820fb0f09eb32ed734b5e84859d7d0a865f9dd415 with preimage 6fe1278c19c76ddc04833e2fe21e30cbcc805bbed3e444a85aeca5b0a1bef149
+> Offramp #34: Lightning payment sent (preimage: 6fe1278c19c76ddc04833e2fe21e30cbcc805bbed3e444a85aeca5b0a1bef149), submitting FulfillOfframp TX...
+SUCCESS: Offramp #34 completed, FulfillOfframp TX: b6b29cc72a14067a7eca61ae6dcb1d27b3fb4e64f8a720a75a51ca1bcf27bb4b
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Offramp #35: CreateOfframp TX submitted (hash: 44cd227a1de6e14a4f6cdc0d89d8bd609a60b7808dfb51e3201669bc1c673d75)
+  CreateOfframp TX: 44cd227a1de6e14a4f6cdc0d89d8bd609a60b7808dfb51e3201669bc1c673d75
+  Polling for CreateOfframp UTxO indexing...
+  Still waiting for UTxO indexing (30s)...
+  UTxO indexed after 40s
+  Sending 50000 cBTC to operator...
+  cBTC TX: f9df658dddde50e32ec3304490948579157fdbde4840968e0f6ade93cd437a81
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX not yet indexed (20s)...
+  TX not yet indexed (30s)...
+  TX indexed after 40s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: 41f4160926d6d7fad1a031f8851eeee8fe72cdbff46dad09bb4b0e3aa8cd8131
+  Lightning preimage: dadd92796775be34...
+  PASS F9-1: offramp completed
+  Pool updated after 20s
+  Pool after: 6251000 cBTC (change: +50000)
+  PASS F9-2: pool increased by 50000
+  Offramp 9 done: id=35 pool=6251000
+
+--- Offramp 10 / 10 ---
+
+Pool before: 6251000 cBTC
+
+EVENT: received payment from payment hash 4a920de700829224c7684ef9acbcd54932e3dcd9c9b54209ff854e851cc57455 of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 4a920de700829224c7684ef9acbcd54932e3dcd9c9b54209ff854e851cc57455 of 50000 millisatoshis
+> getinvoice 50000 3600
+SUCCESS: generated invoice: lntbs500n1p570p5wdqqnp4qv0xhwkj5rl5sadap3tkdllrwmjl0kqlmm9zfyf56f8cuulyzkeeypp59dw0u3xnl2e5800ac5rvfc6k08xdqj9sahyh8n0k9v73dfzzh8xssp55a9qapxl58dt2hnlk6ay5drd6cs7tgfmw46uhfvym4t7z4t09qvs9qyysgqcqpcxqrrssrzjq0rrge52qafu3jc83z39yggmmdcllzqtexw0h5q4gssxj5qnhy3hkq67gsqqdagqquqqqqlgqqqqqqqqfq3klnaagca4keghe3c6ek07lfd4jfau48kmc35ahzxyyldhd5ffj8nahr84qm9agdlydn5yj43kq72svyjhzngne62xdfa293crwf37qp39nl26
+> Offramp ID: 36  Payment hash: 2b5cfe44d3fab343bdfdc506c4e35679ccd048b0edc973cdf62b3d16a442b9cd
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #35: paying Lightning invoice (hash: 4a920de700829224c7684ef9acbcd54932e3dcd9c9b54209ff854e851cc57455)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 4a920de700829224c7684ef9acbcd54932e3dcd9c9b54209ff854e851cc57455 with preimage dadd92796775be34b7901718178e3347e1d54670f0223e66c10071fe6996441e
+> Offramp #35: Lightning payment sent (preimage: dadd92796775be34b7901718178e3347e1d54670f0223e66c10071fe6996441e), submitting FulfillOfframp TX...
+SUCCESS: Offramp #35 completed, FulfillOfframp TX: 41f4160926d6d7fad1a031f8851eeee8fe72cdbff46dad09bb4b0e3aa8cd8131
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+CreateOfframp: retry 2/3 (waiting 15s for Blockfrost indexing)...
+Offramp #36: CreateOfframp TX submitted (hash: 96282385fb3f52fd737d80188e67ff499b7a0a863e064e70f98fd0ca77b4e22f)
+  CreateOfframp TX: 96282385fb3f52fd737d80188e67ff499b7a0a863e064e70f98fd0ca77b4e22f
+  Polling for CreateOfframp UTxO indexing...
+  UTxO indexed after 20s
+  Sending 50000 cBTC to operator...
+  cBTC TX: 0eaf56423bda6e19ce413e11c441bbc2cea6ccf7f4524c077b661070d9f41467
+  Polling for cBTC TX indexing...
+  TX not yet indexed (10s)...
+  TX not yet indexed (20s)...
+  TX not yet indexed (30s)...
+  TX not yet indexed (40s)...
+  TX indexed after 50s
+  Deposit accepted, relay paying Lightning...
+  Poll 0: status = completed
+  FulfillOfframp TX: 56ba749f61c86babb113e1432deb1082220484230d9f03e6b74ada05c6719d62
+  Lightning preimage: 20fc54a4714006bc...
+  PASS F10-1: offramp completed
+  Pool updated after 60s
+  Pool after: 6301000 cBTC (change: +50000)
+  PASS F10-2: pool increased by 50000
+  Offramp 10 done: id=36 pool=6301000
+
+=== Final state ===
+
+Final pool total_liquidity: 6301000 cBTC
+Final pool available:       6301000 cBTC
+FAIL E2E-1: only 9/10 onramps completed (need >= 10)
+PASS E2E-2: 10/10 offramps completed (>= 10)
+PASS E2E-3: final pool = 6301000 (expected 6301000)
+
+=== Writing evidence JSON ===
+
+
+==========================================
+         MS4 EVIDENCE SUMMARY
+==========================================
+
+Network:   Signet (Bitcoin) ↔ Preprod (Cardano)
+Channel:   0f7f1ae048c43a6cffb8298f1984324089307548b9df2b353d3831eb96d052eb (20000 sats)
+Payer:     031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+Relay:     03c634668a0753c8cb0788a252211bdb71ff880bc99cfbd0154420695013b9237b
+
+Onramps (9/10 completed):
+  O1: hash=ae3a68f3b7665268... status=Completed pool=14801000
+        CreateInvoice TX:  1a737be2f936b99cd1242fca0eec187f0c1542279c4f38d6b3686cee12155dda
+        FulfillInvoice TX: 77e76bd12147fcfdfee330833b8bbae7b8f22b886ff452bc378822d85183a2e6
+        LN preimage:       c5d01ee54dbc75eb...
+  O2: hash=29aabc86419b53a0... status=Fulfilling pool=13801000
+        LN preimage:       b068bd8e23015ae5...
+  O3: hash=67c280014ce3e2f0... status=Completed pool=12801000
+        CreateInvoice TX:  bb39f3d03eff4befd80e9d0f919793914408234ffffccf6a120af06e8ca2c44b
+        FulfillInvoice TX: dee507ba0058296359d9bfd9aded4597943433697e9b98c6b153dc9923c0cf40
+        LN preimage:       801c7a742e58ffd5...
+  O4: hash=ff15291fb9d8dae9... status=Completed pool=11801000
+        CreateInvoice TX:  a8e2e28cd07c0a3c87b6e4e945891d4dbbf9f3974b6b946695a2cbe9043bb66c
+        FulfillInvoice TX: bdbf438a00bf4f95e00a633e389d044628c8fce7c737e35d857e6fd5d5578cd9
+        LN preimage:       2bca31391762d6e5...
+  O5: hash=9ec2b75c0b5b59da... status=Completed pool=10801000
+        CreateInvoice TX:  eea3e8c3a4da4ede3ed8010d197891d22d0ce14e2d4c1892009a3a12b4aaf963
+        FulfillInvoice TX: 2275501d94c14b8717170c42b4b1e9dc47f3b1a864405766c2d5777737800e0f
+        LN preimage:       a836adc0ce077b23...
+  O6: hash=3ceb3517f7881d36... status=Completed pool=9801000
+        CreateInvoice TX:  0cfc45d04f5a8a48536edd7dfd7027c09bed1afad86d4ea7d3b6451e862cb400
+        FulfillInvoice TX: ae050d0816e63a82e4f583fe9ffb47cb64e11285be6b4b5256cda8ab128fe351
+        LN preimage:       239939b0702ad30f...
+  O7: hash=d242b615b67bc93a... status=Completed pool=8801000
+        CreateInvoice TX:  6dd9209ad616d30df5fca9381f5f990b26e76f1a86ffe8d6f300df5d678291aa
+        FulfillInvoice TX: a398205914942b1d67a50105b391439fc02f9cc0659fb6df353e0b38438e2e66
+        LN preimage:       21c38c9f62c28645...
+  O8: hash=1c998b06923c62d3... status=Completed pool=7801000
+        CreateInvoice TX:  70805f5ad28735506623ab591c311389f9eca652ac243c2b6d8e088d143a1c93
+        FulfillInvoice TX: 045396ff957295ad976642721bc76cc43ae0dde3f9c9c8326e23de7f37501bbe
+        LN preimage:       5ce238f5e7436406...
+  O9: hash=6d03321a5ac5652b... status=Completed pool=6801000
+        CreateInvoice TX:  65a0b3a2e695e8c72ac367ed3e182ab5a3dc8da212821b5f2cb05d50e0028842
+        FulfillInvoice TX: bf3e7a2304be066f20805c1e9e7fe780f3e3c6fb07c3ecb07d7bd52c10ddb3c9
+        LN preimage:       71dc8c79b171324d...
+  O10: hash=22d39fe96a35b543... status=Completed pool=5801000
+        CreateInvoice TX:  1482000558f5ab851b753f9e2178418cf29cd29af66abaf703a070b01a6b831b
+        FulfillInvoice TX: e460bd09783ee503fb1d12a0b2f3012649ad677482bcb6cda87dd0b230b89f87
+        LN preimage:       0d578893e338fc73...
+
+Offramps (10/10 completed):
+  F1: id=27 hash=b3913f2282817228... status=completed pool=5851000
+        cBTC TX:           cc294d5e7d2637fd215aaaa81d92d9f25a02431eb198ccc888d82fcc2f1b3f42
+        CreateOfframp TX:  62d5bb02adfecdc428cd40be2eaedda94629e325764c0f58503b5bd4b2b8a21f
+        FulfillOfframp TX: 767f70578f74344b7d0b7c764ecd188f3aee4f31b1544c6b97ecbc6433cb0665
+        LN preimage:       1f5ad24ee5ed0786...
+  F2: id=28 hash=693d8121b67f9523... status=completed pool=5901000
+        cBTC TX:           889e0e59c461b67396565536abe1a278be641b0035ee626f984b033129980c77
+        CreateOfframp TX:  806c0018d32826b5d355fec4cceb784fddf70203a2ab084d627534f13fb67231
+        FulfillOfframp TX: f536fe4dcb224260237193bca2e3daaafdbf43ea5904a2ed63f15c96f8c2e337
+        LN preimage:       49102920733ca983...
+  F3: id=29 hash=dec8732ef8b48422... status=completed pool=5951000
+        cBTC TX:           3b3eb06019ab02d88ba3de10e0dd4de0ecdd3444b3a6b7c9a1cdd88b6b191d16
+        CreateOfframp TX:  ea986c6eb57bc0ea6732785b5572642b37e86f0b9dee17675ae0872021f83448
+        FulfillOfframp TX: f672b84b87e6db331de97202a0c6791cf08054e01daa3266a2a1cab01bae4e88
+        LN preimage:       7b83f620b8db344f...
+  F4: id=30 hash=864f0fc4eb470555... status=completed pool=6001000
+        cBTC TX:           b99812ac0c1773d00347233d85dc01d09edc6b2bc494fa1c169a5ea18f76c953
+        CreateOfframp TX:  61f84fab790ddccb6ec68eb67c9d14e3d324005ef5582ed6e2f6d493aadc372c
+        FulfillOfframp TX: 0aaaa20b9bd2dc78f8ab10ce61624d4c0d118e39aa7d5fb306b91b14f59fce5e
+        LN preimage:       9a640d781276d77a...
+  F5: id=31 hash=f0647731a5bf14a5... status=completed pool=6051000
+        cBTC TX:           de963b6e7228a41a70b292d656579a335f7c5834df4598b349eccb205c6e5078
+        CreateOfframp TX:  54d130bc90e08a3fee11fdc6bdb2331be64a47e32facf7c044b76eb42ef0e354
+        FulfillOfframp TX: 31bb7878652a75ff0e09884f5316d0475e1a0ce67359d99b2935084b2c232271
+        LN preimage:       4a5a55518a5469dd...
+  F6: id=32 hash=e4ed0511b0611665... status=completed pool=6101000
+        cBTC TX:           abe11eacf5cb1395eb5e78a9d14a017c389a80c83e9eaabe2e49e025c9946871
+        CreateOfframp TX:  89316cbba15474c78c65cc0c790188da26d35ea2803f8f5db006524d17b6d5ee
+        FulfillOfframp TX: 1a2dcf2b5b5bc6da36633f268b2c58e156c78f5f972ac7981326b31b5c1d26e6
+        LN preimage:       becc195ee64224cd...
+  F7: id=33 hash=8bb6fef4dd80fdb3... status=completed pool=6151000
+        cBTC TX:           e4b641d023d2684170cc8c9868e474f5b332b07e8f4ab1483fb7773b1ed287a5
+        CreateOfframp TX:  c13f28a4fa8c6cba27e9e9d8cdb7e5ecebf90b2a52038ba8e024fd78e288196d
+        FulfillOfframp TX: 0a388897323684b055b59523532b436e41a70aa7fee09d4aa0df3725f03748eb
+        LN preimage:       5395361b55554c90...
+  F8: id=34 hash=896bd34a1ea84644... status=completed pool=6201000
+        cBTC TX:           d8819bf4b41564396a836d865f5ba928fd7023f56375da035f0ed3e8f3823ae9
+        CreateOfframp TX:  7975dc4609f2698812028bff2d2c55192a350bedbbf564e700f7a3c1dbc35942
+        FulfillOfframp TX: b6b29cc72a14067a7eca61ae6dcb1d27b3fb4e64f8a720a75a51ca1bcf27bb4b
+        LN preimage:       6fe1278c19c76ddc...
+  F9: id=35 hash=4a920de700829224... status=completed pool=6251000
+        cBTC TX:           f9df658dddde50e32ec3304490948579157fdbde4840968e0f6ade93cd437a81
+        CreateOfframp TX:  44cd227a1de6e14a4f6cdc0d89d8bd609a60b7808dfb51e3201669bc1c673d75
+        FulfillOfframp TX: 41f4160926d6d7fad1a031f8851eeee8fe72cdbff46dad09bb4b0e3aa8cd8131
+        LN preimage:       dadd92796775be34...
+  F10: id=36 hash=2b5cfe44d3fab343... status=completed pool=6301000
+        cBTC TX:           0eaf56423bda6e19ce413e11c441bbc2cea6ccf7f4524c077b661070d9f41467
+        CreateOfframp TX:  96282385fb3f52fd737d80188e67ff499b7a0a863e064e70f98fd0ca77b4e22f
+        FulfillOfframp TX: 56ba749f61c86babb113e1432deb1082220484230d9f03e6b74ada05c6719d62
+        LN preimage:       20fc54a4714006bc...
+
+Pool flow:
+  Initial:  15801000 cBTC
+  Final:    6301000 cBTC
+  Expected: 6301000 cBTC
+
+STATUS: 51/53 CHECKS PASSED -- SOME FAILED
+
+Evidence file: /home/ilja/pc-work/cardano-lightning-docs/evidence_ms4/ms4_evidence.json
+==========================================
+
+Shutting down...
+
+EVENT: received payment from payment hash 2b5cfe44d3fab343bdfdc506c4e35679ccd048b0edc973cdf62b3d16a442b9cd of 50000 millisatoshis
+> 
+EVENT: claimed payment from payment hash 2b5cfe44d3fab343bdfdc506c4e35679ccd048b0edc973cdf62b3d16a442b9cd of 50000 millisatoshis
+> quit
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+Offramp #36: paying Lightning invoice (hash: 2b5cfe44d3fab343bdfdc506c4e35679ccd048b0edc973cdf62b3d16a442b9cd)
+EVENT: initiated sending 50000 msats to 031e6bbad2a0ff4875bd0c5766ffe376e5f7d81fdeca249134d24f8e73e415b392
+> 
+EVENT: successfully sent payment of 50000 millisatoshis (fee 0 msat) from payment hash 2b5cfe44d3fab343bdfdc506c4e35679ccd048b0edc973cdf62b3d16a442b9cd with preimage 20fc54a4714006bc195aaaaabcfef49e2e753c02a7d9f16210a129169f4a6d42
+> Offramp #36: Lightning payment sent (preimage: 20fc54a4714006bc195aaaaabcfef49e2e753c02a7d9f16210a129169f4a6d42), submitting FulfillOfframp TX...
+SUCCESS: Offramp #36 completed, FulfillOfframp TX: 56ba749f61c86babb113e1432deb1082220484230d9f03e6b74ada05c6719d62
+Cancelling expired offramp #21 (payment_hash: b5d4e006430c62138091806cb0d037ca20f256cfd9848c0401309fa7a668ca0b)
+Offramp #21: CancelOfframp not yet possible (expires_at: 1776680950960): not found: offramp 21 not found
+Cancelling expired offramp #23 (payment_hash: de0591c4c97d6fa1d54d250e1dc6326fa7eeadff5e9f817e456491527c9aa792)
+Offramp #23: CancelOfframp not yet possible (expires_at: 1776685000605): not found: offramp 23 not found
+quit
+Done.
