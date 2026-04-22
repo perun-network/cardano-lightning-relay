@@ -12,3 +12,8 @@ Cargo.lock
 
 # RPC auth
 .env
+
+# Deployment secrets (only .example is tracked)
+secrets/preprod.env
+secrets/*.sk
+secrets/*.hex
