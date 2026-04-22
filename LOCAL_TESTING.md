@@ -27,15 +27,15 @@ cd ~/pc-work/lightning-liquidity-manager
 bash ../cardano-lightning-docs/flows_e2e_runs/test_local_devnet.sh --clean
 
 # 3. Start bitcoind
-~/workrepos/bitcoin-25.0/bin/bitcoind -regtest \
+bitcoind -regtest \
   -rpcuser=ic-btc-integration \
   -rpcpassword='QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=' -daemon
 sleep 2
-~/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest \
+bitcoin-cli -regtest \
   -rpcuser=ic-btc-integration \
   -rpcpassword='QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=' \
   loadwallet testwallet
-~/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest \
+bitcoin-cli -regtest \
   -rpcuser=ic-btc-integration \
   -rpcpassword='QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=' \
   -rpcwallet=testwallet -generate 101
@@ -72,7 +72,7 @@ connectpeer <relay_node_id>@127.0.0.1:9735
 openchannel <relay_node_id> 500000 0
 
 # Mine to confirm channel
-~/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest \
+bitcoin-cli -regtest \
   -rpcuser=ic-btc-integration \
   -rpcpassword='QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=' \
   -rpcwallet=testwallet -generate 6

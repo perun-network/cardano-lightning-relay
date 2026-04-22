@@ -20,14 +20,14 @@ How to set up the Cardano Lightning relay for end-to-end testing on Bitcoin Sign
 Download Bitcoin Core v25.0+ from https://bitcoincore.org/en/download/ and extract.
 
 ```bash
-# Example: extract to ~/workrepos/bitcoin-25.0/
-tar xzf bitcoin-25.0-x86_64-linux-gnu.tar.gz -C ~/workrepos/
+tar xzf bitcoin-25.0-x86_64-linux-gnu.tar.gz
+export PATH="$PWD/bitcoin-25.0/bin:$PATH"
 ```
 
 ### Start bitcoind on Signet
 
 ```bash
-~/workrepos/bitcoin-25.0/bin/bitcoind -signet -daemon
+bitcoind -signet -daemon
 ```
 
 This syncs the Signet chain (~2-3 GB, takes a few hours on first run). Data is stored in `~/.bitcoin/signet/`.
@@ -35,7 +35,7 @@ This syncs the Signet chain (~2-3 GB, takes a few hours on first run). Data is s
 Verify sync progress:
 
 ```bash
-~/workrepos/bitcoin-25.0/bin/bitcoin-cli -signet getblockchaininfo
+bitcoin-cli -signet getblockchaininfo
 ```
 
 Wait until `"initialblockdownload": false`.
@@ -45,7 +45,7 @@ Wait until `"initialblockdownload": false`.
 You need two wallets: one for the payer node (simulates a user), one for the relay operator (optional, only if not using Esplora+BDK).
 
 ```bash
-BTC_CLI="~/workrepos/bitcoin-25.0/bin/bitcoin-cli -signet"
+BTC_CLI="bitcoin-cli -signet"
 
 # Create payer wallet
 $BTC_CLI createwallet "user"
@@ -313,7 +313,7 @@ The payer simulates a user making Lightning payments. It uses bitcoind's wallet 
 
 ```bash
 # Ensure only the 'user' wallet is loaded
-~/workrepos/bitcoin-25.0/bin/bitcoin-cli -signet unloadwallet relay_operator 2>/dev/null
+bitcoin-cli -signet unloadwallet relay_operator 2>/dev/null
 
 ldk-sample/target/release/ldk-sample \
   "$BTC_RPC_AUTH" \
@@ -443,7 +443,7 @@ The cookie file is regenerated each time bitcoind starts, so re-extract after re
 `ldk-sample` crashes with `Wallet file not specified` if bitcoind has multiple wallets loaded. Always unload all wallets except the one the payer uses before starting:
 
 ```bash
-~/workrepos/bitcoin-25.0/bin/bitcoin-cli -signet unloadwallet relay_operator
+bitcoin-cli -signet unloadwallet relay_operator
 ```
 
 ### Channel never becomes ready

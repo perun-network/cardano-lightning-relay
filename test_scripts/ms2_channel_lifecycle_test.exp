@@ -52,6 +52,13 @@ set plutus_json "$lm_dir/plutus-applied.json"
 set script_cbor_file "/tmp/cardano_script_cbor.hex"
 set evidence_file "$home/pc-work/cardano-lightning-docs/flows_e2e_runs/ms2_channel_evidence.json"
 
+# Bitcoin CLI — override with BTC_CLI_PATH env var if not on PATH
+if {[info exists env(BTC_CLI_PATH)]} {
+    set btc_cli_bin $env(BTC_CLI_PATH)
+} else {
+    set btc_cli_bin "bitcoin-cli"
+}
+
 # bitcoind RPC credentials
 set btc_rpc_auth "ic-btc-integration:QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E="
 
@@ -69,7 +76,8 @@ puts ""
 # =============================================================================
 
 proc btc {args} {
-    set result [exec /home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= -rpcwallet=testwallet {*}$args]
+    global btc_cli_bin
+    set result [exec $btc_cli_bin -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= -rpcwallet=testwallet {*}$args]
     return $result
 }
 
@@ -117,7 +125,7 @@ proc cleanup {ldk_id relay_id script_cbor_file} {
 # =============================================================================
 puts "\n=== Section 0: Validating prerequisites ===\n"
 
-if {[catch {exec /home/ilja/workrepos/bitcoin-25.0/bin/bitcoin-cli -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= getblockchaininfo}]} {
+if {[catch {exec $btc_cli_bin -regtest -rpcuser=ic-btc-integration -rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E= getblockchaininfo}]} {
     puts "ERROR: bitcoind not running."
     exit 1
 }
