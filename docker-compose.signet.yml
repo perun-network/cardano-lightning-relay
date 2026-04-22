@@ -1,0 +1,56 @@
+# Signet + Preprod deployment
+#
+# Runs the relay container alongside bitcoind for block sync.
+#
+# Setup:
+#   1. Copy secrets/preprod.env.example to secrets/preprod.env and fill in values
+#   2. Place operator.sk and script_cbor.hex in secrets/
+#   3. Build: docker compose -f docker-compose.signet.yml build
+#   4. Start bitcoind first, let it sync, then start the relay:
+#      docker compose -f docker-compose.signet.yml up -d bitcoind
+#      # Wait for sync: docker exec bitcoind bitcoin-cli -signet getblockchaininfo
+#      docker compose -f docker-compose.signet.yml up -d relay
+#
+# The relay connects to bitcoind for block sync and uses the public
+# mempool.space Esplora API for wallet operations (Esplora+BDK backend).
+
+services:
+  bitcoind:
+    image: bitcoin/bitcoin:25.0
+    container_name: bitcoind
+    command: ["-signet", "-server", "-rpcbind=0.0.0.0", "-rpcallowip=172.0.0.0/8", "-rpcuser=relay", "-rpcpassword=relay"]
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+    ports:
+      - "38332:38332"
+    restart: unless-stopped
+
+  relay:
+    build:
+      context: ..
+      dockerfile: cardano-lightning-relay/Dockerfile
+    container_name: relay
+    depends_on:
+      - bitcoind
+    env_file:
+      - secrets/preprod.env
+    environment:
+      - BITCOIN_ESPLORA_URL=https://mempool.space/signet/api
+      - BITCOIN_WALLET_SEED_PATH=/data/wallet_seed.txt
+      - LDK_MIN_CHANNEL_CONFIRMATIONS=1
+      - CARDANO_ENABLED=1
+      - CARDANO_API_PORT=3002
+      - CARDANO_API_RATE_LIMIT_MAX=100
+      - CARDANO_API_RATE_LIMIT_WINDOW_SECS=60
+    volumes:
+      - relay-data:/data
+      - ./secrets:/secrets:ro
+    ports:
+      - "9735:9735"
+      - "3002:3002"
+    restart: unless-stopped
+    command: ["relay:relay@bitcoind:38332", "/data/ldk_state", "9735", "signet"]
+
+volumes:
+  bitcoin-data:
+  relay-data:
