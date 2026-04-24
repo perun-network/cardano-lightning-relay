@@ -5,11 +5,17 @@
 # Build from the PARENT directory containing both repos:
 #   docker build -f cardano-lightning-relay/Dockerfile -t cardano-lightning-relay .
 #
-# Run (connects to external bitcoind for block sync, uses Esplora+BDK for wallet):
+# Run (connects to external bitcoind for block sync, uses Esplora+BDK for wallet).
+# LDK is configured from environment variables by the entrypoint script — no
+# positional arguments needed. Positional args still work for backwards
+# compatibility (see docker-compose.signet.yml).
+#
 #   docker run -d --name relay \
 #     -p 9735:9735 -p 3002:3002 \
 #     -v relay-data:/data \
 #     -v ./secrets:/secrets:ro \
+#     -e BITCOIN_RPC_URL=<btc_rpc_user>:<btc_rpc_pass>@<bitcoind_host>:38332 \
+#     -e BITCOIN_NETWORK=signet \
 #     -e BITCOIN_ESPLORA_URL=https://mempool.space/signet/api \
 #     -e BITCOIN_WALLET_SEED_PATH=/data/wallet_seed.txt \
 #     -e LDK_MIN_CHANNEL_CONFIRMATIONS=1 \
@@ -24,9 +30,7 @@
 #     -e CARDANO_OPERATOR_ADDRESS=<operator_addr> \
 #     -e CARDANO_OPERATOR_PKH=<operator_pkh> \
 #     -e CARDANO_API_PORT=3002 \
-#     cardano-lightning-relay \
-#       <btc_rpc_user>:<btc_rpc_pass>@<bitcoind_host>:38332 \
-#       /data/ldk_state 9735 signet
+#     cardano-lightning-relay
 
 # ----- Builder -----
 FROM rust:1.88-bookworm AS builder
@@ -53,6 +57,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /build/cardano-lightning-relay/target/release/cardano-lightning-relay \
                     /usr/local/bin/cardano-lightning-relay
+COPY cardano-lightning-relay/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 RUN mkdir -p /data /secrets
 
@@ -66,4 +72,4 @@ VOLUME ["/data", "/secrets"]
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:${CARDANO_API_PORT:-3000}/pool/info || exit 1
 
-ENTRYPOINT ["cardano-lightning-relay"]
+ENTRYPOINT ["docker-entrypoint.sh"]
