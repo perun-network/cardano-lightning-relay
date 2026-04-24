@@ -127,8 +127,9 @@ pub(crate) async fn fulfill_swap(
 	};
 
 	// Build and submit the FulfillInvoice tx (retry on transient Blockfrost-lag errors)
+	let log_prefix = &payment_hash[..payment_hash.len().min(16)];
 	let result = submit_contract_tx_with_retry(
-		&format!("FulfillInvoice({})", &payment_hash[..16]),
+		&format!("FulfillInvoice({})", log_prefix),
 		3,
 		Duration::from_secs(15),
 		|| async {

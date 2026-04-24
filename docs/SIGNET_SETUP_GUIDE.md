@@ -26,16 +26,21 @@ export PATH="$PWD/bitcoin-25.0/bin:$PATH"
 
 ### Start bitcoind on Signet
 
+Pick a datadir for the Signet chain. The default is `~/.bitcoin`; override `BITCOIN_DATADIR` if you want to store the chain on a separate disk.
+
 ```bash
-bitcoind -signet -daemon
+export BITCOIN_DATADIR="${BITCOIN_DATADIR:-$HOME/.bitcoin}"
+mkdir -p "$BITCOIN_DATADIR"
+
+bitcoind -signet -datadir="$BITCOIN_DATADIR" -daemon
 ```
 
-This syncs the Signet chain (~2-3 GB, takes a few hours on first run). Data is stored in `~/.bitcoin/signet/`.
+This syncs the Signet chain (~2-3 GB, takes a few hours on first run). Data is stored in `$BITCOIN_DATADIR/signet/`.
 
 Verify sync progress:
 
 ```bash
-bitcoin-cli -signet getblockchaininfo
+bitcoin-cli -signet -datadir="$BITCOIN_DATADIR" getblockchaininfo
 ```
 
 Wait until `"initialblockdownload": false`.
@@ -45,7 +50,7 @@ Wait until `"initialblockdownload": false`.
 You need two wallets: one for the payer node (simulates a user), one for the relay operator (optional, only if not using Esplora+BDK).
 
 ```bash
-BTC_CLI="bitcoin-cli -signet"
+BTC_CLI="bitcoin-cli -signet -datadir=$BITCOIN_DATADIR"
 
 # Create payer wallet
 $BTC_CLI createwallet "user"
@@ -226,7 +231,7 @@ Signet uses cookie authentication:
 
 ```bash
 COOKIE_USER="__cookie__"
-COOKIE_PASS=$(cat ~/.bitcoin/signet/.cookie | cut -d: -f2)
+COOKIE_PASS=$(cat "$BITCOIN_DATADIR/signet/.cookie" | cut -d: -f2)
 BTC_RPC_AUTH="${COOKIE_USER}:${COOKIE_PASS}@127.0.0.1:38332"
 ```
 
@@ -313,7 +318,7 @@ The payer simulates a user making Lightning payments. It uses bitcoind's wallet 
 
 ```bash
 # Ensure only the 'user' wallet is loaded
-bitcoin-cli -signet unloadwallet relay_operator 2>/dev/null
+bitcoin-cli -signet -datadir="$BITCOIN_DATADIR" unloadwallet relay_operator 2>/dev/null
 
 ldk-sample/target/release/ldk-sample \
   "$BTC_RPC_AUTH" \
@@ -433,7 +438,7 @@ The relay expects `user:pass@host:port` format. For cookie auth on Signet:
 
 ```bash
 COOKIE_USER="__cookie__"
-COOKIE_PASS=$(cat ~/.bitcoin/signet/.cookie | cut -d: -f2)
+COOKIE_PASS=$(cat "$BITCOIN_DATADIR/signet/.cookie" | cut -d: -f2)
 ```
 
 The cookie file is regenerated each time bitcoind starts, so re-extract after restarts.
@@ -443,12 +448,12 @@ The cookie file is regenerated each time bitcoind starts, so re-extract after re
 `ldk-sample` crashes with `Wallet file not specified` if bitcoind has multiple wallets loaded. Always unload all wallets except the one the payer uses before starting:
 
 ```bash
-bitcoin-cli -signet unloadwallet relay_operator
+bitcoin-cli -signet -datadir="$BITCOIN_DATADIR" unloadwallet relay_operator
 ```
 
 ### Channel never becomes ready
 
-- Verify bitcoind is synced: `bitcoin-cli -signet getblockchaininfo` should show `"initialblockdownload": false`
+- Verify bitcoind is synced: `bitcoin-cli -signet -datadir="$BITCOIN_DATADIR" getblockchaininfo` should show `"initialblockdownload": false`
 - Verify the `user` wallet is loaded and funded
 - Wait for at least one Signet block (~10 min) after `openchannel`
 - Check `listchannels` output for `is_channel_ready: false` vs `true`
