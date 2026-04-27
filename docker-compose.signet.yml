@@ -16,7 +16,7 @@
 
 services:
   bitcoind:
-    image: bitcoin/bitcoin:25.0
+    image: bitcoin/bitcoin:28.1
     container_name: bitcoind
     command: ["-signet", "-server", "-rpcbind=0.0.0.0", "-rpcallowip=172.0.0.0/8", "-rpcuser=relay", "-rpcpassword=relay"]
     volumes:
