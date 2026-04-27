@@ -6,9 +6,13 @@ Built on [LDK](https://lightningdevkit.org/) and the [Liquidity Manager](https:/
 
 ## Prerequisites
 
-- **Rust** (edition 2024)
-- **bitcoind** (v25+) running in regtest or testnet mode
+- **Rust** (edition 2024) — for native builds. Skip if you only run via Docker (see [Docker](#docker)).
+- **bitcoind** (v25+) running in regtest or testnet mode — provided automatically by `docker-compose.signet.yml`.
 - **Cardano devnet** ([yaci-devkit](https://github.com/bloxbean/yaci-devkit)) or Blockfrost API access for preprod/mainnet
+- Only if you deploy a **fresh** Liquidity Manager yourself (see [Deploying a fresh Liquidity Manager](#deploying-a-fresh-liquidity-manager)):
+  - [`aiken`](https://aiken-lang.org/installation-instructions) — to build and apply parameters to the validator
+  - [`uv`](https://docs.astral.sh/uv/) — to run the Liquidity Manager Python deploy scripts
+  - [`jq`](https://jqlang.org) — to extract values from JSON
 
 ## Quick Start (Local Devnet)
 
@@ -57,14 +61,15 @@ export CARDANO_OPERATOR_PKH=<pkh_hex>
 
 ## Preprod
 
-For Cardano Preprod deployment, see the [`feat-deploy-preprod`](https://github.com/perun-network/cardano-lightning-relay/tree/feat-deploy-preprod) branch. The key differences:
+The recommended way to run on Preprod is via Docker Compose — see [Option A](#option-a--docker-compose-signet--preprod-recommended) below. It bundles Signet bitcoind alongside the relay and pre-wires the RPC endpoint.
 
-- `CARDANO_BLOCKFROST_URL=https://cardano-preprod.blockfrost.io/api/v0`
-- `CARDANO_BLOCKFROST_KEY=<your-blockfrost-project-id>`
-- Uses built-in `Network::Preprod` cost models (fixes PlutusV3 canonical ordering)
+Key Preprod-specific bits the Compose setup handles for you:
+
+- `CARDANO_BLOCKFROST_URL=https://cardano-preprod.blockfrost.io/api/v0/`
+- Uses built-in `Network::Preprod` cost models (correct PlutusV3 canonical ordering)
 - Fetches protocol params from Blockfrost for correct fee calculation
 
-The [cardano-lightning-client](https://github.com/perun-network/cardano-lightning-client) library (`feat-deploy-preprod` branch) contains the fix.
+Working branches: [`feat-cardano`](https://github.com/perun-network/cardano-lightning-relay/tree/feat-cardano) (this repo) and [`feat-deploy-preprod`](https://github.com/perun-network/cardano-lightning-client/tree/feat-deploy-preprod) (the [cardano-lightning-client](https://github.com/perun-network/cardano-lightning-client) crate).
 
 ## REST API
 
@@ -95,11 +100,159 @@ The relay exposes a REST API on port 3000 (configurable via `CARDANO_API_PORT`).
 
 ## Docker
 
+Two ways to run the relay in Docker.
+
+### Option A — Docker Compose (Signet + Preprod, recommended)
+
+`docker-compose.signet.yml` brings up `bitcoind` (Signet) and the relay in one go. The Bitcoin RPC endpoint is already wired (`relay:relay@bitcoind:38332`); you don't have to configure it yourself.
+
+**1. Clone both repos as siblings in the same parent directory.** The build context is `..` because the relay has a path-dependency on the local `cardano-lightning-client` crate. **Both repos must be on their working feature branches** — `main` does not contain the Cardano + Docker work yet:
+
+```bash
+mkdir cardano-lightning && cd cardano-lightning
+git clone -b feat-deploy-preprod https://github.com/perun-network/cardano-lightning-client
+git clone -b feat-cardano        https://github.com/perun-network/cardano-lightning-relay
+cd cardano-lightning-relay
+```
+
+**2. Create the secrets file.** Compose loads `secrets/preprod.env` via `env_file:`, so it must exist or Compose refuses to start:
+
+```bash
+cp secrets/preprod.env.example secrets/preprod.env
+```
+
+Edit `secrets/preprod.env` and fill in:
+
+- `CARDANO_BLOCKFROST_KEY` — Preprod project ID from [blockfrost.io](https://blockfrost.io) (free tier is fine)
+- `CARDANO_OPERATOR_ADDRESS` (`addr_test1v…`), `CARDANO_OPERATOR_PKH` (hex), `CARDANO_SCRIPT_ADDRESS` (`addr_test1w…`), `CARDANO_CBTC_POLICY_ID` (hex) — all four come from the operator/team in step 3
+
+**3. Get the Cardano-side credentials from the operator/team.** The Liquidity Manager validator is parameterized with the operator's PKH, so the script address + CBOR are bound to a single operator key. Every relay running against the shared pool also runs as that same operator. Coordinate with the operator to receive (over a private channel — Slack, encrypted mail, etc.):
+
+- `operator.sk` — Cardano signing key (sensitive)
+- `script_cbor.hex` — parameterized validator CBOR (~10 kB hex)
+- Four hex values for `secrets/preprod.env`:
+  - `CARDANO_OPERATOR_ADDRESS`, `CARDANO_OPERATOR_PKH`
+  - `CARDANO_SCRIPT_ADDRESS`
+  - `CARDANO_CBTC_POLICY_ID` (asset name is the literal `63425443`, already in `preprod.env.example`)
+
+Plus get your own free [Blockfrost](https://blockfrost.io) project ID for `CARDANO_BLOCKFROST_KEY`.
+
+> **Important:** Only one relay should be live against the same pool at a time — the script's state UTxO is single-spend, so concurrent transactions from two relays will fail. Coordinate handover with the operator.
+
+(If instead you want to spin up a **fresh, independent** LM deployment for solo development, see [Deploying a fresh Liquidity Manager](#deploying-a-fresh-liquidity-manager) below.)
+
+**4. Drop the artefacts into `secrets/`:**
+
+```bash
+cp /path/to/operator.sk    secrets/operator.sk
+cp /path/to/script_cbor.hex secrets/script_cbor.hex
+chmod 600 secrets/operator.sk
+```
+
+Then edit `secrets/preprod.env` and fill in the four hex values plus the Blockfrost key.
+
+**5. Build the image:**
+
+```bash
+docker compose -f docker-compose.signet.yml build
+```
+
+**6. Start bitcoind first and wait for it to sync Signet** (no pruning is configured; an initial sync typically takes one to several hours depending on the link):
+
+```bash
+docker compose -f docker-compose.signet.yml up -d bitcoind
+# poll until "initialblockdownload": false:
+docker exec bitcoind bitcoin-cli -signet \
+  -rpcuser=relay -rpcpassword=relay getblockchaininfo
+```
+
+**7. Start the relay:**
+
+```bash
+docker compose -f docker-compose.signet.yml up -d relay
+docker logs -f relay
+```
+
+REST API on `http://localhost:3002`, Lightning P2P on `9735`. Smoke check:
+
+```bash
+curl http://localhost:3002/pool/info
+```
+
+**Stop everything:**
+
+```bash
+docker compose -f docker-compose.signet.yml down
+```
+
+State persists in two named Docker volumes: `bitcoin-data` (chain state) and `relay-data` (LDK state + wallet seed at `/data/wallet_seed.txt`, auto-generated on first start if missing).
+
+#### Deploying a fresh Liquidity Manager
+
+Use this only if you want a **separate**, independent LM deployment (e.g. for solo development) — it produces a new operator key, a new script address, and a new cBTC token, **not** linked to any existing pool. To run against an existing shared pool, use the credential handover described in step 3 above instead.
+
+```bash
+cd ..
+git clone -b fix/audit-2026-04-10 https://github.com/perun-network/lightning-liquidity-manager
+cd lightning-liquidity-manager
+uv sync
+export CARDANO_NETWORK=preprod
+export CARDANO_BLOCKFROST_KEY=<your_blockfrost_preprod_project_id>
+
+# Generate operator key + write credentials/deployment.json skeleton
+uv run scripts/config.py
+# → prints the operator address. Fund it with at least 1000 tADA from
+#   https://docs.cardano.org/cardano-testnets/tools/faucet, then continue:
+
+aiken build
+uv run scripts/init_contract.py 1000000   # mints + seeds pool with 1M cBTC
+```
+
+After this, `credentials/deployment.json` and `plutus-applied.json` contain everything you need to fill `secrets/preprod.env` + `secrets/script_cbor.hex` in the relay repo. Mapping:
+
+| `secrets/preprod.env` variable | source field in `credentials/deployment.json`     |
+| ------------------------------ | -------------------------------------------------- |
+| `CARDANO_OPERATOR_ADDRESS`     | `.operator.address`                                |
+| `CARDANO_OPERATOR_PKH`         | `.operator.pkh`                                    |
+| `CARDANO_SCRIPT_ADDRESS`       | `.validator.parameterized_script_address`          |
+| `CARDANO_CBTC_POLICY_ID`       | `.token.cbtc_policy`                               |
+| `CARDANO_CBTC_ASSET_NAME`      | `.token.cbtc_asset_name`                           |
+
+```bash
+# Operator signing key
+cp credentials/operator.sk ../cardano-lightning-relay/secrets/operator.sk
+
+# Parameterized validator CBOR
+jq -r '.validators[] | select(.title == "liquidity_manager.liquidity_manager.spend") | .compiledCode' \
+  plutus-applied.json \
+  > ../cardano-lightning-relay/secrets/script_cbor.hex
+```
+
+### Option B — Plain Docker (bring your own bitcoind)
+
 Build from the **parent directory** containing both `cardano-lightning-relay/` and `cardano-lightning-client/`:
 
 ```bash
 docker build -f cardano-lightning-relay/Dockerfile -t cardano-lightning-relay .
 docker run --rm cardano-lightning-relay --help
+```
+
+Run against an external bitcoind. The entrypoint requires either positional arguments or `BITCOIN_RPC_URL` (full env-var list at the top of the [`Dockerfile`](Dockerfile)):
+
+```bash
+docker run -d --name relay \
+  -p 9735:9735 -p 3002:3002 \
+  -v relay-data:/data \
+  -v "$(pwd)/secrets":/secrets:ro \
+  --env-file secrets/preprod.env \
+  -e BITCOIN_RPC_URL=user:pass@<bitcoind_host>:38332 \
+  -e BITCOIN_NETWORK=signet \
+  -e BITCOIN_ESPLORA_URL=https://mempool.space/signet/api \
+  -e BITCOIN_WALLET_SEED_PATH=/data/wallet_seed.txt \
+  -e LDK_MIN_CHANNEL_CONFIRMATIONS=1 \
+  -e CARDANO_ENABLED=1 \
+  -e CARDANO_API_PORT=3002 \
+  cardano-lightning-relay
 ```
 
 ## Nix
