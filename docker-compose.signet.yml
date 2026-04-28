@@ -24,6 +24,16 @@ services:
     ports:
       - "38332:38332"
     restart: unless-stopped
+    # The relay's initial `getblockchaininfo` RPC call fails if bitcoind's
+    # RPC server isn't yet listening — relay then exits via the bail in
+    # main.rs and restart-policy retries. Gate the relay with a real
+    # readiness check so its first start always succeeds.
+    healthcheck:
+      test: ["CMD-SHELL", "bitcoin-cli -signet -rpcuser=relay -rpcpassword=relay getblockchaininfo > /dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   relay:
     build:
@@ -31,7 +41,8 @@ services:
       dockerfile: cardano-lightning-relay/Dockerfile
     container_name: relay
     depends_on:
-      - bitcoind
+      bitcoind:
+        condition: service_healthy
     env_file:
       - secrets/preprod.env
     environment:
