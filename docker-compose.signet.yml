@@ -49,6 +49,11 @@ services:
       - "9735:9735"
       - "3002:3002"
     restart: unless-stopped
+    # The relay binary runs an interactive LDK CLI on stdin. Without a TTY,
+    # `next_line()` returns EOF and the process exits immediately. Keep stdin
+    # open + allocate a pseudo-TTY so the CLI loop blocks instead.
+    stdin_open: true
+    tty: true
     command: ["relay:relay@bitcoind:38332", "/data/ldk_state", "9735", "signet"]
 
 volumes:
