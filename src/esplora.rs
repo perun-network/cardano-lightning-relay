@@ -63,8 +63,8 @@ fn raw_sat_vb_to_sat_kwu(sat_vb: f64) -> u32 {
 		return MIN_FEERATE;
 	}
 
-	let rounded = (sat_vb * 250.0).round();
-	if rounded >= u32::MAX as f64 { u32::MAX } else { rounded as u32 }
+	let rounded_up = (sat_vb * 250.0).ceil();
+	if rounded_up >= u32::MAX as f64 { u32::MAX } else { rounded_up as u32 }
 }
 
 fn sat_vb_to_sat_kwu_clamped(sat_vb: f64, max_sat_kwu: u32) -> u32 {
@@ -415,6 +415,11 @@ mod tests {
 	#[test]
 	fn sat_vb_to_sat_kwu_clamps_extreme_values() {
 		assert_eq!(sat_vb_to_sat_kwu_clamped(100000.0, 5000), 5000);
+	}
+
+	#[test]
+	fn sat_vb_to_sat_kwu_rounds_fractional_estimates_up() {
+		assert_eq!(sat_vb_to_sat_kwu_clamped(4.001, 5000), 1001);
 	}
 
 	#[test]

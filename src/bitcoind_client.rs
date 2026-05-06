@@ -9,7 +9,7 @@ use bitcoin::address::Address;
 use bitcoin::blockdata::constants::WITNESS_SCALE_FACTOR;
 use bitcoin::blockdata::script::ScriptBuf;
 use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::consensus::{encode, Decodable, Encodable};
+use bitcoin::consensus::{Decodable, Encodable, encode};
 use bitcoin::hash_types::{BlockHash, Txid};
 use bitcoin::hashes::Hash;
 use bitcoin::key::XOnlyPublicKey;
@@ -28,8 +28,8 @@ use serde_json;
 use std::collections::HashMap;
 use std::future::Future;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use tokio::runtime::Handle;
@@ -70,6 +70,16 @@ impl BlockSource for BitcoindClient {
 
 /// The minimum feerate we are allowed to send, as specify by LDK.
 const MIN_FEERATE: u32 = 253;
+
+fn bitcoind_funding_outputs(
+	output_script: &ScriptBuf, network: Network, value_sats: u64,
+) -> Result<Vec<HashMap<String, f64>>, String> {
+	let addr = bitcoin::Address::from_script(output_script, network)
+		.map_err(|e| format!("Lightning funding output was not a valid address: {}", e))?;
+	let mut outputs = vec![HashMap::new()];
+	outputs[0].insert(addr.to_string(), value_sats as f64 / 100_000_000.0);
+	Ok(outputs)
+}
 
 impl BitcoindClient {
 	pub(crate) async fn new(
@@ -253,7 +263,46 @@ impl BitcoindClient {
 			.unwrap()
 	}
 
+	pub async fn create_funding_transaction(
+		&self, output_script: ScriptBuf, value_sats: u64,
+	) -> Result<Transaction, String> {
+		if let Some(ref bdk) = self.bdk_wallet {
+			let fee_rate =
+				self.get_est_sat_per_1000_weight(ConfirmationTarget::NonAnchorChannelFee);
+			return bdk.create_funding_transaction(output_script, value_sats, fee_rate).await;
+		}
+
+		let raw_tx = self
+			.create_raw_transaction(bitcoind_funding_outputs(
+				&output_script,
+				self.network,
+				value_sats,
+			)?)
+			.await;
+		let funded_tx = self
+			.try_fund_raw_transaction(raw_tx)
+			.await
+			.map_err(|e| format!("Failed to fund transaction with bitcoind wallet: {}", e))?;
+		let signed_tx = self
+			.try_sign_raw_transaction_with_wallet(funded_tx.hex)
+			.await
+			.map_err(|e| format!("Failed to sign transaction with bitcoind wallet: {}", e))?;
+		if !signed_tx.complete {
+			return Err("bitcoind wallet did not completely sign funding transaction".to_string());
+		}
+
+		encode::deserialize(
+			&hex_utils::to_vec(&signed_tx.hex)
+				.ok_or_else(|| "bitcoind returned non-hex funding transaction".to_string())?,
+		)
+		.map_err(|e| format!("Failed to decode signed funding transaction: {}", e))
+	}
+
 	pub async fn fund_raw_transaction(&self, raw_tx: RawTx) -> FundedTx {
+		self.try_fund_raw_transaction(raw_tx).await.unwrap()
+	}
+
+	async fn try_fund_raw_transaction(&self, raw_tx: RawTx) -> std::io::Result<FundedTx> {
 		let raw_tx_json = serde_json::json!(raw_tx.0);
 		let options = serde_json::json!({
 			// LDK gives us feerates in satoshis per KW but Bitcoin Core here expects fees
@@ -268,10 +317,7 @@ impl BitcoindClient {
 			// change address or to a new channel output negotiated with the same node.
 			"replaceable": false,
 		});
-		self.bitcoind_rpc_client
-			.call_method("fundrawtransaction", &[raw_tx_json, options])
-			.await
-			.unwrap()
+		self.bitcoind_rpc_client.call_method("fundrawtransaction", &[raw_tx_json, options]).await
 	}
 
 	pub async fn send_raw_transaction(&self, raw_tx: RawTx) {
@@ -285,14 +331,16 @@ impl BitcoindClient {
 	pub fn sign_raw_transaction_with_wallet(
 		&self, tx_hex: String,
 	) -> impl Future<Output = SignedTx> {
+		let fut = self.try_sign_raw_transaction_with_wallet(tx_hex);
+		async move { fut.await.unwrap() }
+	}
+
+	fn try_sign_raw_transaction_with_wallet(
+		&self, tx_hex: String,
+	) -> impl Future<Output = std::io::Result<SignedTx>> {
 		let tx_hex_json = serde_json::json!(tx_hex);
 		let rpc_client = self.get_new_rpc_client();
-		async move {
-			rpc_client
-				.call_method("signrawtransactionwithwallet", &vec![tx_hex_json])
-				.await
-				.unwrap()
-		}
+		async move { rpc_client.call_method("signrawtransactionwithwallet", &vec![tx_hex_json]).await }
 	}
 
 	pub fn get_new_address(&self) -> impl Future<Output = Address> {
@@ -475,5 +523,41 @@ impl WalletSource for BitcoindClient {
 			let signed_tx_bytes = hex_utils::to_vec(&signed_tx.hex).ok_or(())?;
 			Transaction::consensus_decode(&mut signed_tx_bytes.as_slice()).map_err(|_| ())
 		})
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bitcoin::script::Builder;
+	use std::str::FromStr;
+
+	#[test]
+	fn bitcoind_funding_outputs_convert_witness_script_to_btc_amount() {
+		let output_script =
+			bitcoin::Address::from_str("tb1qyjw7zj6xctmf4qsk0a2e08y7d3uue05yq6fjun")
+				.unwrap()
+				.require_network(Network::Signet)
+				.unwrap()
+				.script_pubkey();
+
+		let outputs = bitcoind_funding_outputs(&output_script, Network::Signet, 1_000_000)
+			.expect("valid witness funding output");
+
+		assert_eq!(outputs.len(), 1);
+		let (address, btc_amount) = outputs[0].iter().next().unwrap();
+		assert!(address.starts_with("tb1"));
+		assert_eq!(*btc_amount, 0.01);
+	}
+
+	#[test]
+	fn bitcoind_funding_outputs_reject_non_address_script_without_rpc() {
+		let invalid_script =
+			Builder::new().push_opcode(bitcoin::opcodes::all::OP_RETURN).into_script();
+
+		let err = bitcoind_funding_outputs(&invalid_script, Network::Signet, 1_000_000)
+			.expect_err("OP_RETURN is not a valid channel funding address");
+
+		assert!(err.contains("valid address"));
 	}
 }

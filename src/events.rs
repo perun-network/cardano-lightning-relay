@@ -9,10 +9,7 @@ use crate::types::{
 	BumpTxEventHandler, ChannelManager, HTLCStatus, InboundPaymentInfoStorage, MillisatAmount,
 	NetworkGraph, OutboundPaymentInfoStorage, OutputSweeperWrapper, PaymentInfo, PeerManager,
 };
-use bitcoin::blockdata::transaction::Transaction;
-use bitcoin::consensus::encode;
 use bitcoin::network::Network;
-use bitcoin_bech32::WitnessProgram;
 use cardano_lightning_client::OperatorAgent;
 use lightning::events::{Event, PaymentFailureReason, PaymentPurpose};
 use lightning::ln::types::ChannelId;
@@ -22,7 +19,6 @@ use lightning::util::hash_tables::hash_map::Entry;
 use lightning::util::persist::KVStore;
 use lightning::util::ser::Writeable;
 use lightning_persister::fs_store::FilesystemStore;
-use std::collections::HashMap as StdHashMap;
 use std::io::Write;
 use std::net::ToSocketAddrs;
 use std::sync::{Arc, Mutex};
@@ -33,9 +29,8 @@ pub(crate) fn handle_ldk_events<'a>(
 	bump_tx_event_handler: &'a BumpTxEventHandler, peer_manager: Arc<PeerManager>,
 	inbound_payments: Arc<Mutex<InboundPaymentInfoStorage>>,
 	outbound_payments: Arc<Mutex<OutboundPaymentInfoStorage>>, fs_store: Arc<FilesystemStore>,
-	output_sweeper: OutputSweeperWrapper, network: Network,
-	swap_db: Option<Arc<SwapDb>>, operator_agent: Option<Arc<OperatorAgent>>,
-	event: Event,
+	output_sweeper: OutputSweeperWrapper, _network: Network, swap_db: Option<Arc<SwapDb>>,
+	operator_agent: Option<Arc<OperatorAgent>>, event: Event,
 ) -> impl core::future::Future<Output = ()> + 'a {
 	async move {
 		match event {
@@ -46,33 +41,19 @@ pub(crate) fn handle_ldk_events<'a>(
 				output_script,
 				..
 			} => {
-				// Construct the raw transaction with one output, that is paid the amount of the
-				// channel.
-				let addr = WitnessProgram::from_scriptpubkey(
-					&output_script.as_bytes(),
-					match network {
-						Network::Bitcoin => bitcoin_bech32::constants::Network::Bitcoin,
-						Network::Regtest => bitcoin_bech32::constants::Network::Regtest,
-						Network::Signet => bitcoin_bech32::constants::Network::Signet,
-						Network::Testnet | _ => bitcoin_bech32::constants::Network::Testnet,
+				let final_tx = match bitcoind_client
+					.create_funding_transaction(output_script, channel_value_satoshis)
+					.await
+				{
+					Ok(tx) => tx,
+					Err(e) => {
+						println!("\nERROR: Failed to create channel funding transaction: {}", e);
+						print!("> ");
+						std::io::stdout().flush().unwrap();
+						return;
 					},
-				)
-				.expect("Lightning funding tx should always be to a SegWit output")
-				.to_address();
-				let mut outputs = vec![StdHashMap::new()];
-				outputs[0].insert(addr, channel_value_satoshis as f64 / 100_000_000.0);
-				let raw_tx = bitcoind_client.create_raw_transaction(outputs).await;
+				};
 
-				// Have your wallet put the inputs into the transaction such that the output is
-				// satisfied.
-				let funded_tx = bitcoind_client.fund_raw_transaction(raw_tx).await;
-
-				// Sign the final funding transaction and give it to LDK, who will eventually broadcast it.
-				let signed_tx =
-					bitcoind_client.sign_raw_transaction_with_wallet(funded_tx.hex).await;
-				assert_eq!(signed_tx.complete, true);
-				let final_tx: Transaction =
-					encode::deserialize(&hex_utils::to_vec(&signed_tx.hex).unwrap()).unwrap();
 				// Give the funding transaction back to LDK for opening the channel.
 				if channel_manager
 					.funding_transaction_generated(
@@ -83,7 +64,8 @@ pub(crate) fn handle_ldk_events<'a>(
 					.is_err()
 				{
 					println!(
-						"\nERROR: Channel went away before we could fund it. The peer disconnected or refused the channel.");
+						"\nERROR: Channel went away before we could fund it. The peer disconnected or refused the channel."
+					);
 					print!("> ");
 					std::io::stdout().flush().unwrap();
 				}
@@ -214,7 +196,8 @@ pub(crate) fn handle_ldk_events<'a>(
 							let db = Arc::clone(db);
 							let preimage_hex = format!("{}", payment_preimage);
 							tokio::spawn(async move {
-								cardano_offramp::complete_offramp(op, db, hash_hex, preimage_hex).await;
+								cardano_offramp::complete_offramp(op, db, hash_hex, preimage_hex)
+									.await;
 							});
 						}
 					}
@@ -295,7 +278,8 @@ pub(crate) fn handle_ldk_events<'a>(
 				write_future.await.unwrap();
 
 				// Check if this is an offramp payment that failed
-				if let (Some(db), Some(hash), Some(op)) = (&swap_db, &payment_hash, &operator_agent) {
+				if let (Some(db), Some(hash), Some(op)) = (&swap_db, &payment_hash, &operator_agent)
+				{
 					let db = Arc::clone(db);
 					let op = Arc::clone(op);
 					let hash_hex = format!("{}", hash);

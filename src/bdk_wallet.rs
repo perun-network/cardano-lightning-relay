@@ -6,14 +6,14 @@
 //!
 //! Implements LDK's `WalletSource` and `ChangeDestinationSource` traits.
 
-use bdk_esplora::esplora_client::AsyncClient as EsploraAsyncClient;
 use bdk_esplora::EsploraAsyncExt;
+use bdk_esplora::esplora_client::AsyncClient as EsploraAsyncClient;
 use bdk_wallet::bitcoin::Network;
-use bip39::Mnemonic;
 use bdk_wallet::{KeychainKind, Wallet};
+use bip39::Mnemonic;
 use bitcoin::hashes::Hash;
 use bitcoin::psbt::Psbt;
-use bitcoin::{Amount, ScriptBuf, Transaction, TxOut};
+use bitcoin::{Amount, FeeRate, ScriptBuf, Transaction, TxOut};
 use lightning::events::bump_transaction::{Utxo, WalletSource};
 use lightning::sign::ChangeDestinationSource;
 use lightning::util::logger::Logger;
@@ -55,21 +55,14 @@ impl BdkOnchainWallet {
 
 		// BIP84 path: m/84'/1'/0' for testnet, m/84'/0'/0' for mainnet
 		let coin_type = if network == Network::Bitcoin { 0 } else { 1 };
-		let external_desc = format!(
-			"wpkh({}/84'/{}'/{}'/{}/0/*)",
-			xprv, coin_type, 0, 0
-		);
-		let internal_desc = format!(
-			"wpkh({}/84'/{}'/{}'/{}/1/*)",
-			xprv, coin_type, 0, 0
-		);
+		let external_desc = format!("wpkh({}/84'/{}'/{}'/{}/0/*)", xprv, coin_type, 0, 0);
+		let internal_desc = format!("wpkh({}/84'/{}'/{}'/{}/1/*)", xprv, coin_type, 0, 0);
 
 		let wallet = Wallet::create(external_desc, internal_desc)
 			.network(network)
 			.create_wallet_no_persist()?;
 
-		let esplora = bdk_esplora::esplora_client::Builder::new(esplora_url)
-			.build_async()?;
+		let esplora = bdk_esplora::esplora_client::Builder::new(esplora_url).build_async()?;
 
 		println!(
 			"BDK wallet initialized (network: {:?}, first address: {})",
@@ -77,11 +70,7 @@ impl BdkOnchainWallet {
 			wallet.peek_address(KeychainKind::External, 0),
 		);
 
-		Ok(Self {
-			wallet: Mutex::new(wallet),
-			esplora,
-			logger,
-		})
+		Ok(Self { wallet: Mutex::new(wallet), esplora, logger })
 	}
 
 	/// Sync wallet UTXOs with Esplora. Should be called periodically.
@@ -119,9 +108,32 @@ impl BdkOnchainWallet {
 	/// Get a new receiving address.
 	pub fn new_address(&self) -> bitcoin::Address {
 		let mut wallet = self.wallet.lock().unwrap();
-		wallet
-			.reveal_next_address(KeychainKind::External)
-			.address
+		wallet.reveal_next_address(KeychainKind::External).address
+	}
+
+	/// Create and sign a channel funding transaction using BDK-managed UTXOs.
+	pub async fn create_funding_transaction(
+		&self, output_script: ScriptBuf, value_sats: u64, fee_rate_sat_per_kwu: u32,
+	) -> Result<Transaction, String> {
+		self.sync().await.map_err(|e| format!("BDK wallet sync failed before funding: {}", e))?;
+
+		let mut wallet = self.wallet.lock().unwrap();
+		let mut builder = wallet.build_tx();
+		builder
+			.add_recipient(output_script, Amount::from_sat(value_sats))
+			.fee_rate(FeeRate::from_sat_per_kwu(fee_rate_sat_per_kwu as u64));
+		let mut psbt = builder
+			.finish()
+			.map_err(|e| format!("BDK failed to build funding transaction: {}", e))?;
+
+		let finalized = wallet
+			.sign(&mut psbt, bdk_wallet::SignOptions::default())
+			.map_err(|e| format!("BDK failed to sign funding transaction: {}", e))?;
+		if !finalized {
+			return Err("BDK did not finalize the funding transaction".to_string());
+		}
+
+		psbt.extract_tx().map_err(|e| format!("BDK failed to extract funding transaction: {}", e))
 	}
 }
 
@@ -135,10 +147,8 @@ impl WalletSource for BdkOnchainWallet {
 				.list_unspent()
 				.filter(|u| u.chain_position.is_confirmed())
 				.filter_map(|u| {
-					let outpoint = bitcoin::OutPoint {
-						txid: u.outpoint.txid,
-						vout: u.outpoint.vout,
-					};
+					let outpoint =
+						bitcoin::OutPoint { txid: u.outpoint.txid, vout: u.outpoint.vout };
 					let value = Amount::from_sat(u.txout.value.to_sat());
 					let script = &u.txout.script_pubkey;
 
@@ -149,10 +159,7 @@ impl WalletSource for BdkOnchainWallet {
 					} else if script.is_p2tr() {
 						Some(Utxo {
 							outpoint,
-							output: TxOut {
-								value,
-								script_pubkey: script.clone(),
-							},
+							output: TxOut { value, script_pubkey: script.clone() },
 							satisfaction_weight: 1 * 4 + 1 + 1 + 64, // witness: script_sig + items + sig_len + schnorr_sig
 						})
 					} else {
@@ -179,9 +186,8 @@ impl WalletSource for BdkOnchainWallet {
 	) -> lightning::util::async_poll::AsyncResult<'a, Transaction, ()> {
 		Box::pin(async move {
 			let mut wallet = self.wallet.lock().unwrap();
-			let finalized = wallet
-				.sign(&mut psbt, bdk_wallet::SignOptions::default())
-				.map_err(|_| ())?;
+			let finalized =
+				wallet.sign(&mut psbt, bdk_wallet::SignOptions::default()).map_err(|_| ())?;
 			if !finalized {
 				return Err(());
 			}
@@ -241,7 +247,10 @@ mod tests {
 			}
 			assert!(!utxos.is_empty(), "should have at least one UTXO");
 		} else {
-			println!("INFO: BDK wallet has 0 balance — send sBTC to {} first", wallet.new_address());
+			println!(
+				"INFO: BDK wallet has 0 balance — send sBTC to {} first",
+				wallet.new_address()
+			);
 		}
 	}
 
