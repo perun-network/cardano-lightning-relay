@@ -7,6 +7,7 @@
 //!   4. `complete_offramp()` — submit FulfillOfframp TX (deposit cBTC to pool)
 //!   5. `handle_offramp_payment_failed()` — submit CancelOfframp TX on failure
 
+use crate::amounts::cbtc_to_msat;
 use crate::cardano_ops::CardanoOperator;
 use crate::cardano_swap::address_to_pkh;
 use crate::cli::payment_cmds;
@@ -59,12 +60,15 @@ pub(crate) async fn request_offramp(
 		));
 	}
 
-	// Validate amount matches (1:1 cBTC = msat for now)
+	let required_msat = cbtc_to_msat(amount_cbtc)
+		.ok_or_else(|| format!("invalid cBTC amount: {}", amount_cbtc))?;
+
+	// Validate amount matches the requested cBTC amount.
 	if let Some(inv_amt) = invoice.amount_milli_satoshis() {
-		if inv_amt != amount_cbtc as u64 {
+		if inv_amt != required_msat {
 			return Err(format!(
-				"invoice amount {} msat does not match requested {} cBTC",
-				inv_amt, amount_cbtc,
+				"invoice amount {} msat does not match requested {} cBTC ({} msat)",
+				inv_amt, amount_cbtc, required_msat,
 			));
 		}
 	}
@@ -188,11 +192,13 @@ pub(crate) async fn process_offramp_deposit(
 
 	let invoice = Bolt11Invoice::from_str(&mapping.bolt11)
 		.map_err(|e| format!("failed to re-parse bolt11: {:?}", e))?;
+	let required_msat = cbtc_to_msat(mapping.amount_cbtc)
+		.ok_or_else(|| format!("invalid cBTC amount: {}", mapping.amount_cbtc))?;
 
 	if let Err(e) = payment_cmds::send_payment(
 		channel_manager,
 		&invoice,
-		None,
+		Some(required_msat),
 		outbound_payments,
 		fs_store,
 	)

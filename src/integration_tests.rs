@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use crate::cardano_offramp;
 use crate::cardano_ops::CardanoOperator;
 use crate::cardano_swap;
+use crate::amounts::cbtc_to_msat;
 use crate::helpers::current_timestamp_ms;
 use crate::mapping::{OfframpMapping, OfframpStatus, SwapDb, SwapMapping, SwapStatus};
 use crate::recovery;
@@ -860,7 +861,7 @@ async fn test_request_offramp_rejects_duplicate_bolt11_invoice() {
 	let db = Arc::new(SwapDb::open(":memory:"));
 	let addr = test_cardano_address();
 
-	let bolt11 = build_test_bolt11(50_000, &[0xAA; 32]);
+	let bolt11 = build_test_bolt11(cbtc_to_msat(50_000).unwrap(), &[0xAA; 32]);
 
 	// First request succeeds
 	let result1 = cardano_offramp::request_offramp(&mock, &db, &bolt11, 50_000, &addr, 3_600_000).await;
@@ -879,8 +880,8 @@ async fn test_request_offramp_rejects_amount_mismatch() {
 	let db = Arc::new(SwapDb::open(":memory:"));
 	let addr = test_cardano_address();
 
-	// Invoice is for 50_000 msat, request claims 99_999 cBTC
-	let bolt11 = build_test_bolt11(50_000, &[0xBB; 32]);
+	// Invoice is for 50_000 cBTC base units, request claims 99_999 cBTC base units.
+	let bolt11 = build_test_bolt11(cbtc_to_msat(50_000).unwrap(), &[0xBB; 32]);
 
 	let result = cardano_offramp::request_offramp(&mock, &db, &bolt11, 99_999, &addr, 3_600_000).await;
 	assert!(result.is_err());
@@ -906,7 +907,7 @@ async fn test_request_offramp_rejects_mainnet_invoice_on_testnet_relay() {
 			.description("mainnet invoice".into())
 			.payment_hash(sha256::Hash::from_slice(&[0xCC; 32]).unwrap())
 			.payment_secret(PaymentSecret([0x01; 32]))
-			.amount_milli_satoshis(50_000)
+			.amount_milli_satoshis(cbtc_to_msat(50_000).unwrap())
 			.timestamp(std::time::SystemTime::now())
 			.min_final_cltv_expiry_delta(144)
 			.build_signed(|hash| Secp256k1::new().sign_ecdsa_recoverable(hash, &sk))
@@ -926,7 +927,7 @@ async fn test_request_offramp_happy_path() {
 	let db = Arc::new(SwapDb::open(":memory:"));
 	let addr = test_cardano_address();
 
-	let bolt11 = build_test_bolt11(50_000, &[0xDD; 32]);
+	let bolt11 = build_test_bolt11(cbtc_to_msat(50_000).unwrap(), &[0xDD; 32]);
 
 	let result = cardano_offramp::request_offramp(&mock, &db, &bolt11, 50_000, &addr, 3_600_000).await;
 	assert!(result.is_ok(), "request_offramp failed: {:?}", result.err());
@@ -1061,7 +1062,7 @@ async fn test_request_offramp_fills_active_cap() {
 	for i in 0..3u8 {
 		let mut hash_bytes = [0u8; 32];
 		hash_bytes[0] = i + 0xE0;
-		let bolt11 = build_test_bolt11(50_000, &hash_bytes);
+		let bolt11 = build_test_bolt11(cbtc_to_msat(50_000).unwrap(), &hash_bytes);
 		let result = cardano_offramp::request_offramp(&mock, &db, &bolt11, 50_000, &addr, 3_600_000).await;
 		assert!(result.is_ok(), "offramp {} should succeed: {:?}", i, result.err());
 	}

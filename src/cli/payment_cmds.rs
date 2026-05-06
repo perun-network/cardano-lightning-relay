@@ -1,3 +1,4 @@
+use crate::amounts::cbtc_to_msat;
 use crate::disk::OUTBOUND_PAYMENTS_FNAME;
 use crate::types::{
 	ChannelManager, HTLCStatus, InboundPaymentInfoStorage, MillisatAmount,
@@ -166,10 +167,13 @@ pub(crate) fn create_invoice_for_swap(
 	amount_cbtc: i64, description: &str, inbound_payments: &mut InboundPaymentInfoStorage,
 	channel_manager: &ChannelManager, expiry_secs: u32,
 ) -> Option<(String, String)> {
-	// Convert cBTC amount to msat equivalent for the BOLT11 invoice
-	// For now, use 1:1 mapping (amount_cbtc = msats)
-	// TODO: proper exchange rate
-	let amt_msat = amount_cbtc as u64;
+	let amt_msat = match cbtc_to_msat(amount_cbtc) {
+		Some(msat) => msat,
+		None => {
+			println!("ERROR: invalid cBTC amount for swap invoice: {}", amount_cbtc);
+			return None;
+		},
+	};
 
 	let mut invoice_params: Bolt11InvoiceParameters = Default::default();
 	invoice_params.amount_msats = Some(amt_msat);
