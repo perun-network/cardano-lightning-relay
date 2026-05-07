@@ -1,4 +1,4 @@
-pub(crate) const MSATS_PER_CBTC_BASE_UNIT: u64 = 100_000;
+pub(crate) const MSATS_PER_CBTC_BASE_UNIT: u64 = 1_000;
 
 pub(crate) fn cbtc_to_msat(amount_cbtc: i64) -> Option<u64> {
 	if amount_cbtc <= 0 {
@@ -14,8 +14,8 @@ mod tests {
 
 	#[test]
 	fn converts_cbtc_base_units_to_lightning_msats() {
-		assert_eq!(cbtc_to_msat(1), Some(100_000));
-		assert_eq!(cbtc_to_msat(1_000_000), Some(100_000_000_000));
+		assert_eq!(cbtc_to_msat(1), Some(1_000));
+		assert_eq!(cbtc_to_msat(100_000_000), Some(100_000_000_000));
 	}
 
 	#[test]
